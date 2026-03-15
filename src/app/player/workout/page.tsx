@@ -349,7 +349,16 @@ export default function PlayerWorkoutPage() {
             </p>
           )}
         </div>
-
+          <a href="/player/dashboard" style={{
+              padding: '10px 14px',
+              borderRadius: 10,
+              border: '1px solid #52525b',
+              backgroundColor: '#18181b',
+              color: '#ffffff',
+              textDecoration: 'none',
+          }}>
+            Dashboard
+</a>
         <button
           onClick={handleLogout}
           style={{

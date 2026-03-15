@@ -195,6 +195,35 @@ export default function PlayerDashboardPage() {
 
   const recentLogs = useMemo(() => workoutLogs.slice(0, 12), [workoutLogs])
 
+  const totalWeightLifted = useMemo(() => {
+    return workoutLogs.reduce((sum, log) => {
+      const weight = log.weight ?? 0
+      const reps = log.reps_completed ?? 0
+      return sum + weight * reps
+    }, 0)
+  }, [workoutLogs])
+
+  const favoriteLift = useMemo(() => {
+    if (workoutLogs.length === 0) return '—'
+
+    const counts = new Map<string, number>()
+    workoutLogs.forEach((log) => {
+      counts.set(log.exercise, (counts.get(log.exercise) || 0) + 1)
+    })
+
+    let winner = '—'
+    let maxCount = 0
+
+    counts.forEach((count, name) => {
+      if (count > maxCount) {
+        maxCount = count
+        winner = name
+      }
+    })
+
+    return winner
+  }, [workoutLogs])
+
   if (loading) {
     return (
       <div style={pageStyle}>
@@ -237,11 +266,7 @@ export default function PlayerDashboardPage() {
         </div>
       </div>
 
-      {message && (
-        <div style={messageStyle}>
-          {message}
-        </div>
-      )}
+      {message && <div style={messageStyle}>{message}</div>}
 
       <div
         style={{
@@ -255,6 +280,8 @@ export default function PlayerDashboardPage() {
         <StatCard label="Total Logged Sets" value={String(workoutLogs.length)} />
         <StatCard label="Attendance Rate" value={`${attendanceStats.rate}%`} />
         <StatCard label="Current Maxes" value={String(maxes.length)} />
+        <StatCard label="Total Weight Lifted" value={String(totalWeightLifted)} />
+        <StatCard label="Most Logged Lift" value={favoriteLift} />
       </div>
 
       <div style={panelStyle}>

@@ -375,37 +375,36 @@ export default function SessionPage() {
     setMessage('Empty pods created. Drag players into pods or use auto assign.')
   }
 
-  function autoAssignPods() {
-    if (pods.length === 0) {
-      setMessage('Create pods first.')
-      return
-    }
-
-    const athletes = [...presentPlayers]
-
-    if (athletes.length === 0) {
-      setMessage('Mark at least one player Present or Late before assigning pods.')
-      return
-    }
-
-    const clearedPods = pods.map((pod) => ({
-      ...pod,
-      players: [],
-    }))
-
-    athletes.forEach((athlete, index) => {
-      const podIndex = index % clearedPods.length
-      const pod = clearedPods[podIndex]
-
-      if (pod) {
-        pod.players.push(athlete)
-      }
-    })
-
-    setPods(clearedPods)
-    setMessage('Players auto assigned to pods.')
+ function autoAssignPods() {
+  if (pods.length === 0) {
+    setMessage('Create pods first.')
+    return
   }
 
+  const athletes: Athlete[] = [...presentPlayers]
+
+  if (athletes.length === 0) {
+    setMessage('Mark at least one player Present or Late before assigning pods.')
+    return
+  }
+
+  const clearedPods: Pod[] = pods.map((pod) => ({
+    ...pod,
+    players: [] as Athlete[],
+  }))
+
+  athletes.forEach((athlete, index) => {
+    const podIndex = index % clearedPods.length
+    const pod = clearedPods[podIndex]
+
+    if (pod) {
+      pod.players.push(athlete)
+    }
+  })
+
+  setPods(clearedPods)
+  setMessage('Players auto assigned to pods.')
+}
   function removePlayerFromPods(playerId: string) {
     setPods((prev) =>
       prev.map((pod) => ({

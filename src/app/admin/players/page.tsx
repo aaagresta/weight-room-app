@@ -1,194 +1,801 @@
-"use client";
+'use client'
 
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import React, { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../../../lib/supabase'
 
-type Player = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  grad_year: number | null;
-  position: string | null;
-  role: "admin" | "player";
-};
+type Athlete = {
+  id: string
+  first_name: string
+  last_name: string
+  grad_year: number | null
+  positions: string[] | null
+  team_level: string | null
+  tags: string[] | null
+}
 
-type Plan = { id: string; name: string; is_active: boolean };
+type AttendanceLog = {
+  id: string
+  athlete_id: string
+  attendance_date: string
+  status: 'PRESENT' | 'ABSENT' | 'LATE'
+}
 
-type Assignment = {
-  player_id: string;
-  plan_id: string;
-  start_date: string; // YYYY-MM-DD
-  plan_name?: string;
-};
+type AttendanceStats = {
+  present: number
+  absent: number
+  late: number
+  total: number
+  percentage: number
+  todayStatus: 'PRESENT' | 'ABSENT' | 'LATE' | null
+}
 
-export default function AdminPlayersPage() {
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
-  const [error, setError] = useState<string | null>(null);
+export default function PlayersPage() {
+  const [players, setPlayers] = useState<Athlete[]>([])
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([])
+  const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [search, setSearch] = useState('')
+  const [teamFilter, setTeamFilter] = useState('All')
 
-  const todayISO = useMemo(() => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  }, []);
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [gradYear, setGradYear] = useState('')
+  const [positions, setPositions] = useState('')
+  const [teamLevel, setTeamLevel] = useState('')
+  const [tags, setTags] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
+
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null)
+  const [editFirstName, setEditFirstName] = useState('')
+  const [editLastName, setEditLastName] = useState('')
+  const [editGradYear, setEditGradYear] = useState('')
+  const [editPositions, setEditPositions] = useState('')
+  const [editTeamLevel, setEditTeamLevel] = useState('')
+  const [editTags, setEditTags] = useState('')
+  const [editMessage, setEditMessage] = useState('')
 
   useEffect(() => {
-    (async () => {
-      setError(null);
+    loadData()
+  }, [])
 
-      const { data: pData, error: pErr } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name, grad_year, position, role")
-        .order("last_name", { ascending: true });
+  async function loadData() {
+    setLoading(true)
+    setErrorMessage('')
 
-      if (pErr) return setError(pErr.message);
-      setPlayers((pData ?? []).filter((p: any) => p.role === "player"));
+    const [playersResult, attendanceResult] = await Promise.all([
+      supabase
+        .from('athletes')
+        .select('id, first_name, last_name, grad_year, positions, team_level, tags')
+        .order('last_name', { ascending: true }),
 
-      const { data: planData, error: planErr } = await supabase
-        .from("plans")
-        .select("id, name, is_active")
-        .order("created_at", { ascending: false });
+      supabase
+        .from('player_attendance_logs')
+        .select('id, athlete_id, attendance_date, status')
+        .order('attendance_date', { ascending: false }),
+    ])
 
-      if (planErr) return setError(planErr.message);
-      setPlans(planData ?? []);
+    if (playersResult.error) {
+      console.error(playersResult.error)
+      setErrorMessage(playersResult.error.message)
+      setPlayers([])
+    } else {
+      setPlayers(playersResult.data || [])
+    }
 
-      const { data: aData, error: aErr } = await supabase
-        .from("plan_assignments")
-        .select("player_id, plan_id, start_date, plans(name)")
-        .order("created_at", { ascending: false });
+    if (attendanceResult.error) {
+      console.error(attendanceResult.error)
+      setErrorMessage(attendanceResult.error.message)
+      setAttendanceLogs([])
+    } else {
+      setAttendanceLogs((attendanceResult.data as AttendanceLog[]) || [])
+    }
 
-      if (aErr) return setError(aErr.message);
+    setLoading(false)
+  }
 
-      const map: Record<string, Assignment> = {};
-      (aData ?? []).forEach((a: any) => {
-        // keep most recent assignment per player
-        if (!map[a.player_id]) {
-          map[a.player_id] = {
-            player_id: a.player_id,
-            plan_id: a.plan_id,
-            start_date: a.start_date,
-            plan_name: a.plans?.name ?? "Plan",
-          };
-        }
-      });
-      setAssignments(map);
-    })();
-  }, []);
+  async function handleAddPlayer(e: React.FormEvent) {
+    e.preventDefault()
+    setSaveMessage('')
 
-  async function assignPlan(playerId: string, planId: string, startDate: string) {
-    setError(null);
+    if (!firstName.trim() || !lastName.trim()) {
+      setSaveMessage('First name and last name are required.')
+      return
+    }
 
-    const { error } = await supabase.from("plan_assignments").insert({
-      player_id: playerId,
-      plan_id: planId,
-      start_date: startDate,
-    });
+    setSaving(true)
 
-    if (error) return setError(error.message);
+    const parsedPositions = positions
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p !== '')
 
-    // refresh that player's latest assignment
-    const { data: aData } = await supabase
-      .from("plan_assignments")
-      .select("player_id, plan_id, start_date, plans(name)")
-      .eq("player_id", playerId)
-      .order("created_at", { ascending: false })
-      .limit(1);
+    const parsedTags = tags
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t !== '')
 
-    const latest: any = aData?.[0];
-    if (latest) {
-      setAssignments((prev) => ({
-        ...prev,
-        [playerId]: {
-          player_id: latest.player_id,
-          plan_id: latest.plan_id,
-          start_date: latest.start_date,
-          plan_name: latest.plans?.name ?? "Plan",
-        },
-      }));
+    const parsedGradYear = gradYear.trim() ? Number(gradYear) : null
+
+    const { error } = await supabase.from('athletes').insert([
+      {
+        org_id: '11111111-1111-1111-1111-111111111111',
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        grad_year: parsedGradYear,
+        positions: parsedPositions,
+        team_level: teamLevel.trim() || null,
+        tags: parsedTags,
+      },
+    ])
+
+    if (error) {
+      console.error(error)
+      setSaveMessage(`Error: ${error.message}`)
+    } else {
+      setSaveMessage('Player added successfully.')
+      setFirstName('')
+      setLastName('')
+      setGradYear('')
+      setPositions('')
+      setTeamLevel('')
+      setTags('')
+      await loadData()
+    }
+
+    setSaving(false)
+  }
+
+  function startEditPlayer(player: Athlete) {
+    setEditingPlayerId(player.id)
+    setEditFirstName(player.first_name || '')
+    setEditLastName(player.last_name || '')
+    setEditGradYear(player.grad_year ? String(player.grad_year) : '')
+    setEditPositions(player.positions?.join(', ') || '')
+    setEditTeamLevel(player.team_level || '')
+    setEditTags(player.tags?.join(', ') || '')
+    setEditMessage('')
+  }
+
+  function cancelEditPlayer() {
+    setEditingPlayerId(null)
+    setEditFirstName('')
+    setEditLastName('')
+    setEditGradYear('')
+    setEditPositions('')
+    setEditTeamLevel('')
+    setEditTags('')
+    setEditMessage('')
+  }
+
+  async function handleUpdatePlayer(playerId: string) {
+    setEditMessage('')
+
+    if (!editFirstName.trim() || !editLastName.trim()) {
+      setEditMessage('First name and last name are required.')
+      return
+    }
+
+    const parsedPositions = editPositions
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p !== '')
+
+    const parsedTags = editTags
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t !== '')
+
+    const parsedGradYear = editGradYear.trim() ? Number(editGradYear) : null
+
+    const { error } = await supabase
+      .from('athletes')
+      .update({
+        first_name: editFirstName.trim(),
+        last_name: editLastName.trim(),
+        grad_year: parsedGradYear,
+        positions: parsedPositions,
+        team_level: editTeamLevel.trim() || null,
+        tags: parsedTags,
+      })
+      .eq('id', playerId)
+
+    if (error) {
+      console.error(error)
+      setEditMessage(`Error: ${error.message}`)
+    } else {
+      await loadData()
+      cancelEditPlayer()
     }
   }
 
+  async function handleDeletePlayer(playerId: string, playerName: string) {
+    const confirmed = window.confirm(`Delete ${playerName}?`)
+    if (!confirmed) return
+
+    const { error } = await supabase.from('athletes').delete().eq('id', playerId)
+
+    if (error) {
+      console.error(error)
+      alert(`Error deleting player: ${error.message}`)
+    } else {
+      await loadData()
+    }
+  }
+
+  async function handleMarkAttendance(
+    athleteId: string,
+    status: 'PRESENT' | 'ABSENT' | 'LATE'
+  ) {
+    const today = new Date().toISOString().split('T')[0]
+
+    const { error } = await supabase.from('player_attendance_logs').upsert(
+      [
+        {
+          athlete_id: athleteId,
+          attendance_date: today,
+          status,
+        },
+      ],
+      {
+        onConflict: 'athlete_id,attendance_date',
+      }
+    )
+
+    if (error) {
+      console.error(error)
+      alert(`Error saving attendance: ${error.message}`)
+    } else {
+      await loadData()
+    }
+  }
+
+  const attendanceStatsMap = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]
+    const stats: Record<string, AttendanceStats> = {}
+
+    for (const player of players) {
+      stats[player.id] = {
+        present: 0,
+        absent: 0,
+        late: 0,
+        total: 0,
+        percentage: 0,
+        todayStatus: null,
+      }
+    }
+
+    for (const log of attendanceLogs) {
+      if (!stats[log.athlete_id]) continue
+
+      stats[log.athlete_id].total += 1
+
+      if (log.status === 'PRESENT') stats[log.athlete_id].present += 1
+      if (log.status === 'ABSENT') stats[log.athlete_id].absent += 1
+      if (log.status === 'LATE') stats[log.athlete_id].late += 1
+
+      if (log.attendance_date === today) {
+        stats[log.athlete_id].todayStatus = log.status
+      }
+    }
+
+    for (const athleteId of Object.keys(stats)) {
+      const record = stats[athleteId]
+      const attendedCount = record.present + record.late
+      record.percentage =
+        record.total > 0 ? Math.round((attendedCount / record.total) * 100) : 0
+    }
+
+    return stats
+  }, [players, attendanceLogs])
+
+  const filteredPlayers = useMemo(() => {
+    return players.filter((player) => {
+      const fullName = `${player.first_name ?? ''} ${player.last_name ?? ''}`.toLowerCase()
+      const positionsText = Array.isArray(player.positions)
+        ? player.positions.join(' ').toLowerCase()
+        : ''
+      const team = (player.team_level ?? '').trim()
+      const searchText = search.trim().toLowerCase()
+
+      const matchesSearch =
+        searchText === '' ||
+        fullName.includes(searchText) ||
+        positionsText.includes(searchText)
+
+      const matchesTeam =
+        teamFilter === 'All' ||
+        team.toLowerCase() === teamFilter.toLowerCase()
+
+      return matchesSearch && matchesTeam
+    })
+  }, [players, search, teamFilter])
+
+  const teamOptions = Array.from(
+    new Set(
+      players
+        .map((p) => (p.team_level ?? '').trim())
+        .filter((value) => value !== '')
+    )
+  )
+
+  const overallPresent = attendanceLogs.filter((l) => l.status === 'PRESENT').length
+  const overallAbsent = attendanceLogs.filter((l) => l.status === 'ABSENT').length
+  const overallLate = attendanceLogs.filter((l) => l.status === 'LATE').length
+  const overallTotal = attendanceLogs.length
+  const overallRate =
+    overallTotal > 0 ? Math.round(((overallPresent + overallLate) / overallTotal) * 100) : 0
+
+  const varsityCount = players.filter((p) => (p.team_level || '').toLowerCase() === 'varsity').length
+  const jvCount = players.filter((p) => (p.team_level || '').toLowerCase() === 'jv').length
+  const freshmanCount = players.filter((p) => (p.team_level || '').toLowerCase() === 'freshman').length
+
   return (
-    <section>
-      <h2 style={{ fontSize: 20, fontWeight: 900, marginBottom: 10 }}>Players</h2>
-      <div style={{ opacity: 0.8, marginBottom: 12 }}>
-        Assign each player a plan + start date. That start date is the <b>calendar anchor</b>.
+    <div style={{ padding: 24, backgroundColor: '#000000', minHeight: '100vh', color: '#ffffff' }}>
+      <h1 style={{ marginBottom: 8 }}>Players</h1>
+      <p style={{ color: '#a1a1aa', marginBottom: 20 }}>
+        View and manage athlete data and attendance.
+      </p>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
+        <div style={statCardStyle}>
+          <div style={statLabelStyle}>Total Players</div>
+          <div style={statValueStyle}>{players.length}</div>
+        </div>
+
+        <div style={statCardStyle}>
+          <div style={statLabelStyle}>Overall Attendance Rate</div>
+          <div style={statValueStyle}>{overallRate}%</div>
+        </div>
+
+        <div style={statCardStyle}>
+          <div style={statLabelStyle}>Present</div>
+          <div style={statValueStyle}>{overallPresent}</div>
+        </div>
+
+        <div style={statCardStyle}>
+          <div style={statLabelStyle}>Absent</div>
+          <div style={statValueStyle}>{overallAbsent}</div>
+        </div>
+
+        <div style={statCardStyle}>
+          <div style={statLabelStyle}>Late</div>
+          <div style={statValueStyle}>{overallLate}</div>
+        </div>
+
+        <div style={statCardStyle}>
+          <div style={statLabelStyle}>Varsity / JV / Freshman</div>
+          <div style={{ ...statValueStyle, fontSize: 22 }}>
+            {varsityCount} / {jvCount} / {freshmanCount}
+          </div>
+        </div>
       </div>
 
-      {error && <div style={{ color: "crimson", marginBottom: 12 }}>{error}</div>}
+      <div style={panelStyle}>
+        <h2 style={{ marginTop: 0, color: '#ffffff' }}>Add Player</h2>
 
-      <div style={{ display: "grid", gap: 10 }}>
-        {players.map((p) => {
-          const name = `${p.first_name ?? ""} ${p.last_name ?? ""}`.trim() || "Unnamed Player";
-          const current = assignments[p.id];
+        <form onSubmit={handleAddPlayer}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+              gap: 12,
+              marginBottom: 12,
+            }}
+          >
+            <input
+              type="text"
+              placeholder="First name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              style={inputStyle}
+            />
 
-          return (
-            <div key={p.id} style={{ border: "1px solid #ddd", borderRadius: 14, padding: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div>
-                  <div style={{ fontWeight: 900 }}>{name}</div>
-                  <div style={{ opacity: 0.85 }}>
-                    Grad: {p.grad_year ?? "—"} • Position: {p.position ?? "—"}
+            <input
+              type="text"
+              placeholder="Last name"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="number"
+              placeholder="Grad year"
+              value={gradYear}
+              onChange={(e) => setGradYear(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="text"
+              placeholder="Team level (Varsity, JV, Freshman)"
+              value={teamLevel}
+              onChange={(e) => setTeamLevel(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="text"
+              placeholder="Positions (comma separated)"
+              value={positions}
+              onChange={(e) => setPositions(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="text"
+              placeholder="Tags (comma separated)"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          <button type="submit" disabled={saving} style={buttonStyle}>
+            {saving ? 'Saving...' : 'Add Player'}
+          </button>
+        </form>
+
+        {saveMessage && (
+          <p
+            style={{
+              marginTop: 12,
+              color: saveMessage.startsWith('Error') ? '#f87171' : '#4ade80',
+            }}
+          >
+            {saveMessage}
+          </p>
+        )}
+      </div>
+
+      <div style={controlsStyle}>
+        <h3 style={{ marginTop: 0, color: '#ffffff' }}>Player Controls</h3>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', marginBottom: 6, color: '#d4d4d8' }}>Search</label>
+          <input
+            type="text"
+            placeholder="Search by name or position"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ ...inputStyle, maxWidth: 400 }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', marginBottom: 6, color: '#d4d4d8' }}>Team Filter</label>
+          <select
+            value={teamFilter}
+            onChange={(e) => setTeamFilter(e.target.value)}
+            style={{ ...inputStyle, maxWidth: 250 }}
+          >
+            <option value="All">All Teams</option>
+            {teamOptions.map((team) => (
+              <option key={team} value={team}>
+                {team}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <button onClick={loadData} style={secondaryButtonStyle}>
+          Refresh Players
+        </button>
+
+        <p style={{ marginTop: 12, marginBottom: 0, color: '#d4d4d8' }}>
+          <strong>Total loaded:</strong> {players.length} &nbsp; | &nbsp;
+          <strong>Showing:</strong> {filteredPlayers.length}
+        </p>
+      </div>
+
+      {loading && <p>Loading players...</p>}
+
+      {!loading && errorMessage && (
+        <p style={{ color: '#f87171' }}>Error: {errorMessage}</p>
+      )}
+
+      {!loading && !errorMessage && filteredPlayers.length === 0 && (
+        <p style={{ color: '#d4d4d8' }}>No players found.</p>
+      )}
+
+      {!loading && !errorMessage && filteredPlayers.length > 0 && (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {filteredPlayers.map((player) => {
+            const stats = attendanceStatsMap[player.id] || {
+              present: 0,
+              absent: 0,
+              late: 0,
+              total: 0,
+              percentage: 0,
+              todayStatus: null,
+            }
+
+            return (
+              <div
+                key={player.id}
+                style={{
+                  border: '1px solid #52525b',
+                  borderRadius: 10,
+                  padding: 16,
+                  backgroundColor: '#3f3f46',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                  color: '#ffffff',
+                }}
+              >
+                {editingPlayerId === player.id ? (
+                  <div>
+                    <h3 style={{ marginTop: 0 }}>Edit Player</h3>
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                        gap: 12,
+                        marginBottom: 12,
+                      }}
+                    >
+                      <input
+                        type="text"
+                        placeholder="First name"
+                        value={editFirstName}
+                        onChange={(e) => setEditFirstName(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="text"
+                        placeholder="Last name"
+                        value={editLastName}
+                        onChange={(e) => setEditLastName(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="number"
+                        placeholder="Grad year"
+                        value={editGradYear}
+                        onChange={(e) => setEditGradYear(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="text"
+                        placeholder="Team level"
+                        value={editTeamLevel}
+                        onChange={(e) => setEditTeamLevel(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="text"
+                        placeholder="Positions (comma separated)"
+                        value={editPositions}
+                        onChange={(e) => setEditPositions(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="text"
+                        placeholder="Tags (comma separated)"
+                        value={editTags}
+                        onChange={(e) => setEditTags(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button onClick={() => handleUpdatePlayer(player.id)} style={buttonStyle}>
+                        Save Changes
+                      </button>
+
+                      <button onClick={cancelEditPlayer} style={secondaryButtonStyle}>
+                        Cancel
+                      </button>
+                    </div>
+
+                    {editMessage && (
+                      <p style={{ marginTop: 12, color: editMessage.startsWith('Error') ? '#f87171' : '#4ade80' }}>
+                        {editMessage}
+                      </p>
+                    )}
                   </div>
-                  <div style={{ marginTop: 6, opacity: 0.9 }}>
-                    Current plan: <b>{current?.plan_name ?? "None"}</b>{" "}
-                    {current?.start_date ? <span>(start {current.start_date})</span> : null}
-                  </div>
-                </div>
+                ) : (
+                  <div>
+                    <h3 style={{ marginTop: 0, marginBottom: 6 }}>
+                      {player.first_name} {player.last_name}
+                    </h3>
 
-                <AssignForm
-                  plans={plans}
-                  defaultStartDate={todayISO}
-                  onAssign={(planId, startDate) => assignPlan(p.id, planId, startDate)}
-                />
+                    <p style={{ margin: '4px 0' }}>
+                      <strong>Team:</strong> {player.team_level || 'No team'}
+                    </p>
+
+                    <p style={{ margin: '4px 0' }}>
+                      <strong>Grade:</strong> {player.grad_year ?? '-'}
+                    </p>
+
+                    <p style={{ margin: '4px 0' }}>
+                      <strong>Positions:</strong>{' '}
+                      {player.positions?.length ? player.positions.join(', ') : '—'}
+                    </p>
+
+                    <p style={{ margin: '4px 0 12px 0' }}>
+                      <strong>Tags:</strong>{' '}
+                      {player.tags?.length ? player.tags.join(', ') : '—'}
+                    </p>
+
+                    <div
+                      style={{
+                        border: '1px solid #52525b',
+                        borderRadius: 10,
+                        padding: 12,
+                        backgroundColor: '#27272a',
+                        marginBottom: 12,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>Attendance</div>
+                      <p style={{ margin: '4px 0' }}>
+                        <strong>Rate:</strong> {stats.percentage}%
+                      </p>
+                      <p style={{ margin: '4px 0' }}>
+                        <strong>Present:</strong> {stats.present} &nbsp; | &nbsp;
+                        <strong>Absent:</strong> {stats.absent} &nbsp; | &nbsp;
+                        <strong>Late:</strong> {stats.late}
+                      </p>
+                      <p style={{ margin: '4px 0' }}>
+                        <strong>Today:</strong> {stats.todayStatus || 'Not marked'}
+                      </p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                      <button
+                        onClick={() => handleMarkAttendance(player.id, 'PRESENT')}
+                        style={attendancePresentButton}
+                      >
+                        Mark Present
+                      </button>
+
+                      <button
+                        onClick={() => handleMarkAttendance(player.id, 'LATE')}
+                        style={attendanceLateButton}
+                      >
+                        Mark Late
+                      </button>
+
+                      <button
+                        onClick={() => handleMarkAttendance(player.id, 'ABSENT')}
+                        style={attendanceAbsentButton}
+                      >
+                        Mark Absent
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button onClick={() => startEditPlayer(player)} style={buttonStyle}>
+                        Edit
+                      </button>
+
+                      <button
+                        onClick={() =>
+                          handleDeletePlayer(player.id, `${player.first_name} ${player.last_name}`)
+                        }
+                        style={deleteButtonStyle}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          );
-        })}
-        {players.length === 0 && <div style={{ opacity: 0.7 }}>No players found yet (users become players when they sign up).</div>}
-      </div>
-    </section>
-  );
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
 }
 
-function AssignForm({
-  plans,
-  defaultStartDate,
-  onAssign,
-}: {
-  plans: Plan[];
-  defaultStartDate: string;
-  onAssign: (planId: string, startDate: string) => void;
-}) {
-  const [planId, setPlanId] = useState(plans[0]?.id ?? "");
-  const [startDate, setStartDate] = useState(defaultStartDate);
+const statCardStyle: React.CSSProperties = {
+  border: '1px solid #52525b',
+  borderRadius: 12,
+  padding: 16,
+  backgroundColor: '#18181b',
+}
 
-  useEffect(() => {
-    if (!planId && plans[0]?.id) setPlanId(plans[0].id);
-  }, [plans, planId]);
+const statLabelStyle: React.CSSProperties = {
+  color: '#a1a1aa',
+  fontSize: 14,
+  marginBottom: 8,
+}
 
-  return (
-    <div style={{ display: "grid", gap: 8, minWidth: 260 }}>
-      <select value={planId} onChange={(e) => setPlanId(e.target.value)} style={{ padding: 10 }}>
-        {plans.map((pl) => (
-          <option key={pl.id} value={pl.id}>
-            {pl.name}{pl.is_active ? "" : " (inactive)"}
-          </option>
-        ))}
-      </select>
+const statValueStyle: React.CSSProperties = {
+  color: '#ffffff',
+  fontSize: 28,
+  fontWeight: 700,
+}
 
-      <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ padding: 10 }} />
+const panelStyle: React.CSSProperties = {
+  border: '1px solid #3f3f46',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 20,
+  backgroundColor: '#18181b',
+}
 
-      <button
-        onClick={() => planId && startDate && onAssign(planId, startDate)}
-        style={{ padding: 10, fontWeight: 800 }}
-        disabled={!planId || !startDate}
-      >
-        Assign
-      </button>
-    </div>
-  );
+const controlsStyle: React.CSSProperties = {
+  border: '1px solid #52525b',
+  borderRadius: 12,
+  padding: 16,
+  marginBottom: 20,
+  backgroundColor: '#18181b',
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: 12,
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+}
+
+const buttonStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const secondaryButtonStyle: React.CSSProperties = {
+  padding: '10px 16px',
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#18181b',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const deleteButtonStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  borderRadius: 10,
+  border: '1px solid #7f1d1d',
+  backgroundColor: '#7f1d1d',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const attendancePresentButton: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #166534',
+  backgroundColor: '#166534',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const attendanceLateButton: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #a16207',
+  backgroundColor: '#a16207',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const attendanceAbsentButton: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #991b1b',
+  backgroundColor: '#991b1b',
+  color: '#ffffff',
+  cursor: 'pointer',
 }

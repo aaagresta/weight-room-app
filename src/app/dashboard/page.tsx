@@ -1,9 +1,17 @@
 "use client";
-
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { getWeekAndDay } from "@/lib/date";
+
+<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+  <Image src="/logo.png" alt="VCS Logo" width={50} height={50} priority />
+  <div>
+    <div style={{ fontSize: 22, fontWeight: 900 }}>Player Dashboard</div>
+    <div style={{ opacity: 0.75, fontSize: 12 }}>Valley Christian Offseason Program</div>
+  </div>
+</div>
 
 type Assignment = {
   plan_id: string;

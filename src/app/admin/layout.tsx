@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { requireAdmin } from "@/lib/admin";
@@ -40,6 +41,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <div>
           <div style={{ opacity: 0.75, fontSize: 13 }}>Admin</div>
+          <Image src="/logo.png" alt="VCS Logo" width={60} height={60} priority />
           <div style={{ fontSize: 22, fontWeight: 900 }}>Offseason Workout Manager</div>
         </div>
         <button onClick={signOut} style={{ padding: "8px 12px" }}>Sign out</button>

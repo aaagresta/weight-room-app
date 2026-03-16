@@ -112,6 +112,10 @@ export default function AdminPage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         }}
       >
+<a href="/admin/account-approvals" style={cardStyle}>
+  <h2 style={cardTitleStyle}>Account Approvals</h2>
+  <p style={cardTextStyle}>Approve new player and coach accounts.</p>
+</a>
 
         <a href="/admin/monitor" style={cardStyle}>
   <h2 style={cardTitleStyle}>Live Monitor</h2>

@@ -26,7 +26,7 @@ export default function LoginPage() {
 
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, approval_status')
       .eq('id', user.id)
       .single()
 
@@ -64,6 +64,8 @@ export default function LoginPage() {
       error: userError,
     } = await supabase.auth.getUser()
 
+
+
     if (userError || !user) {
       setMessage('Login succeeded, but user could not be loaded.')
       setLoading(false)
@@ -72,7 +74,7 @@ export default function LoginPage() {
 
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role')
+      .select('role, approval_status')
       .eq('id', user.id)
       .single()
 
@@ -82,15 +84,27 @@ export default function LoginPage() {
       return
     }
 
-    if (profile.role === 'admin' || profile.role === 'coach') {
-      router.push('/admin')
-      return
-    }
+  if (profile.approval_status === 'pending') {
+  router.push('/pending-approval')
+  return
+}
 
-    if (profile.role === 'athlete' || profile.role === 'player') {
-      router.push('/player/workout')
-      return
-    }
+if (profile.approval_status === 'rejected') {
+  setMessage('Your account request was rejected.')
+  setLoading(false)
+  return
+}
+
+if (profile.role === 'admin' || profile.role === 'coach') {
+  router.push('/admin')
+  return
+}
+
+if (profile.role === 'athlete' || profile.role === 'player') {
+  router.push('/player/workout')
+  return
+}
+
 
     setMessage('Your account does not have a valid role.')
     setLoading(false)
@@ -149,12 +163,8 @@ export default function LoginPage() {
         </form>
 
         <div style={{ marginTop: 18, display: 'grid', gap: 8 }}>
-          <a href="/signup/player" style={linkStyle}>
-            New player? Create player account
-          </a>
-
-          <a href="/signup/coach" style={linkStyle}>
-            Coach / admin signup
+          <a href="/signup" style={linkStyle}>
+                   Create Account
           </a>
         </div>
 

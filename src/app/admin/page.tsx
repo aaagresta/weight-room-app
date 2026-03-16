@@ -162,6 +162,11 @@ export default function AdminPage() {
           <h2 style={cardTitleStyle}>Lift Logs</h2>
           <p style={cardTextStyle}>Record and review player lift data.</p>
         </a>
+
+        <a href="/admin/max-submissions" style={cardStyle}>
+  <h2 style={cardTitleStyle}>Max Submissions</h2>
+  <p style={cardTextStyle}>Approve or reject player-submitted max updates.</p>
+</a>
       </div>
     </div>
   )

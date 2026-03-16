@@ -5,6 +5,17 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '../../../lib/supabase'
 
+type MaxSubmission = {
+  id: string
+  athlete_id: string
+  lift_name: string
+  submitted_weight: number
+  tested_on: string | null
+  notes: string | null
+  status: string
+  created_at?: string
+}
+
 type Athlete = {
   id: string
   first_name: string
@@ -48,6 +59,14 @@ type GroupedWorkout = {
   logs: PlayerWorkoutLog[]
 }
 
+  const MAIN_LIFTS = [
+  'Bench Press',
+  'Back Squat',
+  'Deadlift',
+  'Hang Clean',
+  'Front Squat',
+]
+
 export default function PlayerDashboardPage() {
   const router = useRouter()
 
@@ -58,6 +77,12 @@ export default function PlayerDashboardPage() {
   const [maxes, setMaxes] = useState<PlayerLiftMax[]>([])
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([])
   const [workoutLogs, setWorkoutLogs] = useState<PlayerWorkoutLog[]>([])
+
+const [submissions, setSubmissions] = useState<MaxSubmission[]>([])
+const [selectedLift, setSelectedLift] = useState(MAIN_LIFTS[0])
+const [submittedWeight, setSubmittedWeight] = useState('')
+const [testedOn, setTestedOn] = useState(new Date().toISOString().split('T')[0])
+const [submissionNotes, setSubmissionNotes] = useState('')
 
   useEffect(() => {
     loadDashboard()
@@ -118,7 +143,7 @@ export default function PlayerDashboardPage() {
 
     setAthlete(athleteData as Athlete)
 
-    const [maxesResult, attendanceResult, workoutLogsResult] = await Promise.all([
+    const [maxesResult, attendanceResult, workoutLogsResult, submissionsResult] = await Promise.all([
       supabase
         .from('player_lift_maxes')
         .select('*')
@@ -137,6 +162,12 @@ export default function PlayerDashboardPage() {
         .eq('athlete_id', athleteData.id)
         .order('workout_date', { ascending: false })
         .order('created_at', { ascending: false }),
+
+      supabase
+    .from('player_max_submissions')
+    .select('*')
+    .eq('athlete_id', athleteData.id)
+    .order('created_at', { ascending: false }),
     ])
 
     if (maxesResult.error) {
@@ -157,12 +188,66 @@ export default function PlayerDashboardPage() {
       return
     }
 
+    if (submissionsResult.error) {
+  setMessage(`Could not load max submissions: ${submissionsResult.error.message}`)
+  setLoading(false)
+  return
+}
+
     setMaxes((maxesResult.data as PlayerLiftMax[]) || [])
     setAttendanceLogs((attendanceResult.data as AttendanceLog[]) || [])
     setWorkoutLogs((workoutLogsResult.data as PlayerWorkoutLog[]) || [])
+    setSubmissions((submissionsResult.data as MaxSubmission[]) || [])
     setLoading(false)
   }
 
+  async function submitMaxEntry(e: React.FormEvent) {
+  e.preventDefault()
+  setMessage('')
+
+  if (!athlete) {
+    setMessage('Could not find your athlete profile.')
+    return
+  }
+
+  if (!selectedLift) {
+    setMessage('Please choose a lift.')
+    return
+  }
+
+  if (!submittedWeight.trim()) {
+    setMessage('Please enter a weight.')
+    return
+  }
+
+  const parsedWeight = Number(submittedWeight)
+
+  if (Number.isNaN(parsedWeight)) {
+    setMessage('Weight must be a valid number.')
+    return
+  }
+
+  const { error } = await supabase.from('player_max_submissions').insert([
+    {
+      athlete_id: athlete.id,
+      lift_name: selectedLift,
+      submitted_weight: parsedWeight,
+      tested_on: testedOn || null,
+      notes: submissionNotes.trim() || null,
+      status: 'pending',
+    },
+  ])
+
+  if (error) {
+    setMessage(`Could not submit max: ${error.message}`)
+    return
+  }
+
+  setMessage('Max submitted for coach approval.')
+  setSubmittedWeight('')
+  setSubmissionNotes('')
+  await loadDashboard()
+}
   const attendanceStats = useMemo(() => {
     const total = attendanceLogs.length
     const present = attendanceLogs.filter((log) => log.status === 'PRESENT').length
@@ -275,7 +360,92 @@ export default function PlayerDashboardPage() {
             </button>
           </div>
         </div>
+<div style={panelStyle}>
+  <h2 style={{ marginTop: 0 }}>Submit a New Max</h2>
 
+  <form onSubmit={submitMaxEntry}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 12,
+        marginBottom: 12,
+      }}
+    >
+      <div>
+        <label style={smallLabelStyle}>Lift</label>
+        <select
+          value={selectedLift}
+          onChange={(e) => setSelectedLift(e.target.value)}
+          style={inputStyle}
+        >
+          {MAIN_LIFTS.map((lift) => (
+            <option key={lift} value={lift}>
+              {lift}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label style={smallLabelStyle}>Submitted Weight</label>
+        <input
+          type="number"
+          value={submittedWeight}
+          onChange={(e) => setSubmittedWeight(e.target.value)}
+          style={inputStyle}
+          placeholder="Example: 225"
+        />
+      </div>
+
+      <div>
+        <label style={smallLabelStyle}>Tested On</label>
+        <input
+          type="date"
+          value={testedOn}
+          onChange={(e) => setTestedOn(e.target.value)}
+          style={inputStyle}
+        />
+      </div>
+    </div>
+
+    <div style={{ marginBottom: 12 }}>
+      <label style={smallLabelStyle}>Notes</label>
+      <input
+        type="text"
+        value={submissionNotes}
+        onChange={(e) => setSubmissionNotes(e.target.value)}
+        style={inputStyle}
+        placeholder="Optional note"
+      />
+    </div>
+
+    <button type="submit" style={navButtonStyle}>
+      Submit for Approval
+    </button>
+  </form>
+</div>
+
+<div style={panelStyle}>
+  <h2 style={{ marginTop: 0 }}>My Max Submissions</h2>
+
+  {submissions.length === 0 ? (
+    <p style={{ color: '#d4d4d8' }}>No submissions yet.</p>
+  ) : (
+    <div style={{ display: 'grid', gap: 8 }}>
+      {submissions.map((submission) => (
+        <div key={submission.id} style={entryRowStyle}>
+          <div>
+            <strong>{submission.lift_name}</strong> — {submission.submitted_weight} lbs
+          </div>
+          <div style={{ textTransform: 'capitalize' }}>
+            {submission.status}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
         <div style={heroSubStyle}>
           Track your lifting progress, attendance, maxes, and workout history.
         </div>
@@ -577,4 +747,22 @@ const logoutButtonStyle: React.CSSProperties = {
   backgroundColor: '#991b1b',
   color: '#ffffff',
   cursor: 'pointer',
+}
+
+const navButtonStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 12,
+  border: '1px solid #1d4ed8',
+  backgroundColor: '#1d4ed8',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: 12,
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
 }

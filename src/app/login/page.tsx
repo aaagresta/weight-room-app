@@ -2,9 +2,8 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '../../lib/supabase'
-
-
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,34 +14,34 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-  checkExistingSession()
-}, [])
+    checkExistingSession()
+  }, [])
 
-async function checkExistingSession() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  async function checkExistingSession() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) return
+    if (!user) return
 
-  const { data: profile, error } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
 
-  if (error || !profile) return
+    if (error || !profile) return
 
-  if (profile.role === 'admin' || profile.role === 'coach') {
-    router.push('/admin')
-    return
+    if (profile.role === 'admin' || profile.role === 'coach') {
+      router.push('/admin')
+      return
+    }
+
+    if (profile.role === 'athlete' || profile.role === 'player') {
+      router.push('/player/workout')
+      return
+    }
   }
-
-  if (profile.role === 'athlete' || profile.role === 'player') {
-    router.push('/player/workout')
-    return
-  }
-}
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -88,41 +87,38 @@ async function checkExistingSession() {
       return
     }
 
-   if (profile.role === 'athlete' || profile.role === 'player') {
-  router.push('/player/workout')
-  return
-}
+    if (profile.role === 'athlete' || profile.role === 'player') {
+      router.push('/player/workout')
+      return
+    }
 
     setMessage('Your account does not have a valid role.')
     setLoading(false)
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#000000',
-        color: '#ffffff',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 24,
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 420,
-          backgroundColor: '#18181b',
-          border: '1px solid #3f3f46',
-          borderRadius: 12,
-          padding: 24,
-        }}
-      >
-        <h1 style={{ marginTop: 0, marginBottom: 8 }}>Weight Room Login</h1>
-        <p style={{ color: '#a1a1aa', marginBottom: 20 }}>
-          Log in to access your dashboard or workout.
-        </p>
+    <div style={pageStyle}>
+      <div style={overlayStyle} />
+
+      <div style={cardStyle}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div style={logoWrapStyle}>
+            <Image
+              src="/EAGLE WING LOGO.png"
+              alt="Valley Christian Logo"
+              width={400}
+              height={400}
+              priority
+              style={{ objectFit: 'contain' }}
+            />
+          </div>
+
+          <h1 style={titleStyle}>EAGLE STRENGTH</h1>
+          <p style={subtitleStyle}>
+            Valley Christian Strength and Conditioning portal.
+            Log in to access your stength and conditioning path. 
+          </p>
+        </div>
 
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: 14 }}>
@@ -163,13 +159,70 @@ async function checkExistingSession() {
         </div>
 
         {message && (
-          <p style={{ marginTop: 16, color: '#f87171' }}>
+          <p style={{ marginTop: 16, color: '#f87171', textAlign: 'center' }}>
             {message}
           </p>
         )}
       </div>
     </div>
   )
+}
+
+const pageStyle: React.CSSProperties = {
+  minHeight: '100vh',
+  background:
+    'linear-gradient(135deg, #020617 0%, #0f172a 45%, #172554 100%)',
+  color: '#ffffff',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  padding: 24,
+  position: 'relative',
+  overflow: 'hidden',
+}
+
+const overlayStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  background:
+    'radial-gradient(circle at top, rgba(59,130,246,0.18), transparent 35%)',
+  pointerEvents: 'none',
+}
+
+const cardStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: 460,
+  backgroundColor: 'rgba(24, 24, 27, 0.94)',
+  border: '1px solid #334155',
+  borderRadius: 20,
+  padding: 28,
+  boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+  position: 'relative',
+  zIndex: 1,
+}
+
+const logoWrapStyle: React.CSSProperties = {
+  width: 130,
+  height: 130,
+  margin: '0 auto 16px auto',
+  borderRadius: 999,
+  backgroundColor: '#0f172a',
+  border: '1px solid #334155',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+}
+
+const titleStyle: React.CSSProperties = {
+  margin: '0 0 8px 0',
+  fontSize: 30,
+  fontWeight: 800,
+}
+
+const subtitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: '#94a3b8',
+  fontSize: 15,
 }
 
 const labelStyle: React.CSSProperties = {
@@ -180,24 +233,27 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: 12,
-  borderRadius: 10,
-  border: '1px solid #52525b',
-  backgroundColor: '#27272a',
+  padding: 13,
+  borderRadius: 12,
+  border: '1px solid #475569',
+  backgroundColor: '#0f172a',
   color: '#ffffff',
+  outline: 'none',
 }
 
 const buttonStyle: React.CSSProperties = {
   width: '100%',
-  padding: '12px 16px',
-  borderRadius: 10,
-  border: '1px solid #166534',
-  backgroundColor: '#166534',
+  padding: '13px 16px',
+  borderRadius: 12,
+  border: '1px solid #1d4ed8',
+  backgroundColor: '#1d4ed8',
   color: '#ffffff',
   cursor: 'pointer',
+  fontWeight: 700,
 }
 
 const linkStyle: React.CSSProperties = {
   color: '#93c5fd',
   textDecoration: 'none',
+  textAlign: 'center',
 }

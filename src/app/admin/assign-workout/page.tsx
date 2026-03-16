@@ -608,14 +608,21 @@ export default function AssignWorkoutPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <button onClick={() => startEditWorkout(workout)} style={buttonStyle}>
-                    Edit Workout
-                  </button>
+  <a
+    href={`/admin/assignments?workoutId=${workout.id}`}
+    style={assignLinkStyle}
+  >
+    Assign Workout
+  </a>
 
-                  <button onClick={() => deleteWorkout(workout.id)} style={deleteButtonStyle}>
-                    Delete Workout
-                  </button>
-                </div>
+  <button onClick={() => startEditWorkout(workout)} style={buttonStyle}>
+    Edit Workout
+  </button>
+
+  <button onClick={() => deleteWorkout(workout.id)} style={deleteButtonStyle}>
+    Delete Workout
+  </button>
+</div>
               </div>
             ))}
           </div>
@@ -695,7 +702,16 @@ const deleteButtonStyle: React.CSSProperties = {
   color: '#ffffff',
   cursor: 'pointer',
 }
-
+const assignLinkStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  borderRadius: 10,
+  border: '1px solid #2563eb',
+  backgroundColor: '#2563eb',
+  color: '#ffffff',
+  cursor: 'pointer',
+  textDecoration: 'none',
+  display: 'inline-block',
+}
 const smallDeleteButtonStyle: React.CSSProperties = {
   padding: '10px 12px',
   borderRadius: 8,

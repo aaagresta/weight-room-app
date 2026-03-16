@@ -40,8 +40,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <main style={{ maxWidth: 1000, margin: "30px auto", padding: 16 }}>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <div>
-          <div style={{ opacity: 0.75, fontSize: 13 }}>Admin</div>
-          <Image src="/logo.png" alt="VCS Logo" width={60} height={60} priority />
+          <div style={{ opacity: 0.75, fontSize: 17 }}>Admin Dashboard</div>
+          <Image src="/logo.png" alt="VCS Logo" width={100} height={60} priority />
           <div style={{ fontSize: 22, fontWeight: 900 }}>Offseason Workout Manager</div>
         </div>
         <button onClick={signOut} style={{ padding: "8px 12px" }}>Sign out</button>

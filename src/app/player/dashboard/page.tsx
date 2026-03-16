@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '../../../lib/supabase'
 
 type Athlete = {
@@ -235,34 +236,48 @@ export default function PlayerDashboardPage() {
 
   return (
     <div style={pageStyle}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 16,
-          flexWrap: 'wrap',
-          marginBottom: 20,
-        }}
-      >
-        <div>
-          <h1 style={{ marginBottom: 8 }}>Player Dashboard</h1>
-          {athlete && (
-            <p style={{ color: '#a1a1aa', margin: 0 }}>
-              {athlete.first_name} {athlete.last_name}
-              {athlete.team_level ? ` • ${athlete.team_level}` : ''}
-            </p>
-          )}
+      <div style={heroStyle}>
+        <div style={heroHeaderStyle}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            <div style={logoWrapStyle}>
+              <Image
+                src="/logo.png"
+                alt="Valley Christian Logo"
+                width={70}
+                height={70}
+                priority
+                style={{ objectFit: 'contain' }}
+              />
+            </div>
+
+            <div>
+              <h1 style={{ margin: '0 0 8px 0', fontSize: 34 }}>Player Dashboard</h1>
+              {athlete && (
+                <p style={{ color: '#cbd5e1', margin: 0, fontSize: 16 }}>
+                  {athlete.first_name} {athlete.last_name}
+                  {athlete.team_level ? ` • ${athlete.team_level}` : ''}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a href="/player/workout" style={navLinkStyle}>
+              My Workout
+            </a>
+
+              <a href="/player/upcoming-workouts" style={navLinkStyle}>
+               Upcoming Workouts
+            </a>
+
+            <button onClick={handleLogout} style={logoutButtonStyle}>
+              Log Out
+            </button>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <a href="/player/workout" style={navLinkStyle}>
-            My Workout
-          </a>
-
-          <button onClick={handleLogout} style={logoutButtonStyle}>
-            Log Out
-          </button>
+        <div style={heroSubStyle}>
+          Track your lifting progress, attendance, maxes, and workout history.
         </div>
       </div>
 
@@ -427,9 +442,45 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 
 const pageStyle: React.CSSProperties = {
   padding: 24,
-  backgroundColor: '#000000',
+  background:
+    'linear-gradient(180deg, #020617 0%, #000000 220px, #000000 100%)',
   minHeight: '100vh',
   color: '#ffffff',
+}
+
+const heroStyle: React.CSSProperties = {
+  border: '1px solid #334155',
+  borderRadius: 20,
+  padding: 24,
+  marginBottom: 20,
+  background:
+    'linear-gradient(135deg, rgba(30,41,59,1) 0%, rgba(15,23,42,1) 45%, rgba(23,37,84,1) 100%)',
+  boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
+}
+
+const heroHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 16,
+  flexWrap: 'wrap',
+  marginBottom: 12,
+}
+
+const heroSubStyle: React.CSSProperties = {
+  color: '#94a3b8',
+  fontSize: 15,
+}
+
+const logoWrapStyle: React.CSSProperties = {
+  width: 86,
+  height: 86,
+  borderRadius: 999,
+  backgroundColor: 'rgba(15,23,42,0.9)',
+  border: '1px solid #475569',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 }
 
 const messageStyle: React.CSSProperties = {
@@ -443,21 +494,21 @@ const messageStyle: React.CSSProperties = {
 
 const panelStyle: React.CSSProperties = {
   border: '1px solid #3f3f46',
-  borderRadius: 12,
-  padding: 16,
+  borderRadius: 16,
+  padding: 18,
   marginBottom: 20,
   backgroundColor: '#18181b',
 }
 
 const statCardStyle: React.CSSProperties = {
-  border: '1px solid #52525b',
-  borderRadius: 12,
-  padding: 16,
-  backgroundColor: '#18181b',
+  border: '1px solid #334155',
+  borderRadius: 16,
+  padding: 18,
+  backgroundColor: '#111827',
 }
 
 const statLabelStyle: React.CSSProperties = {
-  color: '#a1a1aa',
+  color: '#94a3b8',
   fontSize: 14,
   marginBottom: 8,
 }
@@ -465,19 +516,19 @@ const statLabelStyle: React.CSSProperties = {
 const statValueStyle: React.CSSProperties = {
   color: '#ffffff',
   fontSize: 24,
-  fontWeight: 700,
+  fontWeight: 800,
 }
 
 const miniStatStyle: React.CSSProperties = {
   border: '1px solid #52525b',
-  borderRadius: 10,
+  borderRadius: 12,
   padding: 12,
   backgroundColor: '#27272a',
 }
 
 const rowCardStyle: React.CSSProperties = {
   border: '1px solid #52525b',
-  borderRadius: 10,
+  borderRadius: 12,
   padding: 16,
   backgroundColor: '#27272a',
   display: 'grid',
@@ -488,7 +539,7 @@ const rowCardStyle: React.CSSProperties = {
 
 const historyCardStyle: React.CSSProperties = {
   border: '1px solid #52525b',
-  borderRadius: 10,
+  borderRadius: 12,
   padding: 16,
   backgroundColor: '#27272a',
 }
@@ -512,16 +563,16 @@ const smallLabelStyle: React.CSSProperties = {
 
 const navLinkStyle: React.CSSProperties = {
   padding: '10px 14px',
-  borderRadius: 10,
-  border: '1px solid #52525b',
-  backgroundColor: '#18181b',
+  borderRadius: 12,
+  border: '1px solid #475569',
+  backgroundColor: 'rgba(15,23,42,0.85)',
   color: '#ffffff',
   textDecoration: 'none',
 }
 
 const logoutButtonStyle: React.CSSProperties = {
   padding: '10px 14px',
-  borderRadius: 10,
+  borderRadius: 12,
   border: '1px solid #991b1b',
   backgroundColor: '#991b1b',
   color: '#ffffff',

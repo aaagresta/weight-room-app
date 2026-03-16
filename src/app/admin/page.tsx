@@ -118,6 +118,11 @@ export default function AdminPage() {
   <p style={cardTextStyle}>See who is logging lifts and monitor progress live.</p>
 </a> 
 
+        <a href="/admin/assignments" style={cardStyle}>
+  <h2 style={cardTitleStyle}>Workout Assignments</h2>
+  <p style={cardTextStyle}>Choose which saved workouts are visible to teams or players.</p>
+</a>
+
         <a href="/admin/players" style={cardStyle}>
           <h2 style={cardTitleStyle}>Players</h2>
           <p style={cardTextStyle}>View player data, attendance, and progress.</p>

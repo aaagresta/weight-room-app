@@ -109,7 +109,7 @@ export default function AccountApprovalsPage() {
         const { error } = await supabase
           .from('profiles')
           .update({
-            role: 'athlete',
+            role: 'player',
             approval_status: 'approved',
             athlete_id: chosenAthleteId,
           })
@@ -147,7 +147,7 @@ export default function AccountApprovalsPage() {
       const { error: profileError } = await supabase
         .from('profiles')
         .update({
-          role: 'athlete',
+          role: 'player',
           approval_status: 'approved',
           athlete_id: newAthlete.id,
         })

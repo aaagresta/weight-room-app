@@ -430,6 +430,10 @@ if (!athleteData) {
               Upcoming Workouts
             </a>
 
+             <a href="/player/leaderboard" style={navLinkStyle}>
+             Leaderboard
+            </a>
+
             <button onClick={handleLogout} style={logoutButtonStyle}>
               Log Out
             </button>

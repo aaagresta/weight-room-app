@@ -152,11 +152,6 @@ export default function AdminPage() {
           <p style={cardTextStyle}>Create custom daily workouts for each team.</p>
         </a>
 
-        <a href="/admin/days" style={cardStyle}>
-          <h2 style={cardTitleStyle}>Training Days</h2>
-          <p style={cardTextStyle}>Build daily sessions and organize training flow.</p>
-        </a>
-
         <a href="/admin/session" style={cardStyle}>
           <h2 style={cardTitleStyle}>Start Lift Session</h2>
           <p style={cardTextStyle}>Run today’s lift, track attendance, and control the room.</p>

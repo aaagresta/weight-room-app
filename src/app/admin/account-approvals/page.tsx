@@ -129,7 +129,7 @@ export default function AccountApprovalsPage() {
 
      const DEFAULT_ORG_ID = '11111111-1111-1111-1111-111111111111'
 
-const { data: newAthlete, error: athleteError } = await supabase
+    const { data: newAthlete, error: athleteError } = await supabase
   .from('athletes')
   .insert([
     {

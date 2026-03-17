@@ -135,16 +135,22 @@ export default function PlayerDashboardPage() {
     }
 
     const { data: athleteData, error: athleteError } = await supabase
-      .from('athletes')
-      .select('id, first_name, last_name, team_level, profile_image_path')
-      .eq('id', profile.athlete_id)
-      .single()
+  .from('athletes')
+  .select('id, first_name, last_name, team_level, profile_image_path')
+  .eq('id', profile.athlete_id)
+  .maybeSingle()
 
-    if (athleteError || !athleteData) {
-      setMessage('Could not load your athlete profile.')
-      setLoading(false)
-      return
-    }
+    if (athleteError) {
+  setMessage(`Could not load your athlete profile: ${athleteError.message}`)
+  setLoading(false)
+  return
+}
+
+if (!athleteData) {
+  setMessage('No athlete record was found for your account.')
+  setLoading(false)
+  return
+}
 
     setAthlete(athleteData as Athlete)
 

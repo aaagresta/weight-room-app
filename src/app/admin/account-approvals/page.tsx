@@ -127,18 +127,20 @@ export default function AccountApprovalsPage() {
 
       const nameParts = splitName(profile.full_name)
 
-      const { data: newAthlete, error: athleteError } = await supabase
-        .from('athletes')
-        .insert([
-          {
-            first_name: nameParts.firstName,
-            last_name: nameParts.lastName,
-            team_level: 'Varsity',
-          },
-        ])
-        .select()
-        .single()
+     const DEFAULT_ORG_ID = '11111111-1111-1111-1111-111111111111'
 
+const { data: newAthlete, error: athleteError } = await supabase
+  .from('athletes')
+  .insert([
+    {
+      first_name: nameParts.firstName,
+      last_name: nameParts.lastName,
+      team_level: 'Varsity',
+      org_id: DEFAULT_ORG_ID,
+    },
+  ])
+  .select()
+  .single()
       if (athleteError || !newAthlete) {
         setMessage(`Error creating athlete: ${athleteError?.message || 'Unknown error'}`)
         return

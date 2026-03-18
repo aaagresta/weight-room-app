@@ -12,6 +12,10 @@ type Athlete = {
   positions: string[] | null
   team_level: string | null
   tags: string[] | null
+  height: string | null
+  weight: number | null
+  forty_yard_dash: number | null
+  pro_shuttle: number | null
 }
 
 type AttendanceLog = {
@@ -30,6 +34,11 @@ type AttendanceStats = {
   todayStatus: 'PRESENT' | 'ABSENT' | 'LATE' | null
 }
 
+function formatTime(value: number | null) {
+  if (value === null || value === undefined) return '—'
+  return Number(value).toFixed(2)
+}
+
 export default function PlayersPage() {
   const router = useRouter()
 
@@ -46,6 +55,10 @@ export default function PlayersPage() {
   const [positions, setPositions] = useState('')
   const [teamLevel, setTeamLevel] = useState('')
   const [tags, setTags] = useState('')
+  const [height, setHeight] = useState('')
+  const [weight, setWeight] = useState('')
+  const [fortyYardDash, setFortyYardDash] = useState('')
+  const [proShuttle, setProShuttle] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState('')
 
@@ -56,6 +69,10 @@ export default function PlayersPage() {
   const [editPositions, setEditPositions] = useState('')
   const [editTeamLevel, setEditTeamLevel] = useState('')
   const [editTags, setEditTags] = useState('')
+  const [editHeight, setEditHeight] = useState('')
+  const [editWeight, setEditWeight] = useState('')
+  const [editFortyYardDash, setEditFortyYardDash] = useState('')
+  const [editProShuttle, setEditProShuttle] = useState('')
   const [editMessage, setEditMessage] = useState('')
 
   useEffect(() => {
@@ -69,7 +86,9 @@ export default function PlayersPage() {
     const [playersResult, attendanceResult] = await Promise.all([
       supabase
         .from('athletes')
-        .select('id, first_name, last_name, grad_year, positions, team_level, tags')
+        .select(
+          'id, first_name, last_name, grad_year, positions, team_level, tags, height, weight, forty_yard_dash, pro_shuttle'
+        )
         .order('last_name', { ascending: true }),
 
       supabase
@@ -119,6 +138,9 @@ export default function PlayersPage() {
       .filter((t) => t !== '')
 
     const parsedGradYear = gradYear.trim() ? Number(gradYear) : null
+    const parsedWeight = weight.trim() ? Number(weight) : null
+    const parsedForty = fortyYardDash.trim() ? Number(fortyYardDash) : null
+    const parsedShuttle = proShuttle.trim() ? Number(proShuttle) : null
 
     const { error } = await supabase.from('athletes').insert([
       {
@@ -129,6 +151,10 @@ export default function PlayersPage() {
         positions: parsedPositions,
         team_level: teamLevel.trim() || null,
         tags: parsedTags,
+        height: height.trim() || null,
+        weight: parsedWeight,
+        forty_yard_dash: parsedForty,
+        pro_shuttle: parsedShuttle,
       },
     ])
 
@@ -143,6 +169,10 @@ export default function PlayersPage() {
       setPositions('')
       setTeamLevel('')
       setTags('')
+      setHeight('')
+      setWeight('')
+      setFortyYardDash('')
+      setProShuttle('')
       await loadData()
     }
 
@@ -157,6 +187,18 @@ export default function PlayersPage() {
     setEditPositions(player.positions?.join(', ') || '')
     setEditTeamLevel(player.team_level || '')
     setEditTags(player.tags?.join(', ') || '')
+    setEditHeight(player.height || '')
+    setEditWeight(player.weight !== null && player.weight !== undefined ? String(player.weight) : '')
+    setEditFortyYardDash(
+      player.forty_yard_dash !== null && player.forty_yard_dash !== undefined
+        ? String(player.forty_yard_dash)
+        : ''
+    )
+    setEditProShuttle(
+      player.pro_shuttle !== null && player.pro_shuttle !== undefined
+        ? String(player.pro_shuttle)
+        : ''
+    )
     setEditMessage('')
   }
 
@@ -168,6 +210,10 @@ export default function PlayersPage() {
     setEditPositions('')
     setEditTeamLevel('')
     setEditTags('')
+    setEditHeight('')
+    setEditWeight('')
+    setEditFortyYardDash('')
+    setEditProShuttle('')
     setEditMessage('')
   }
 
@@ -190,6 +236,9 @@ export default function PlayersPage() {
       .filter((t) => t !== '')
 
     const parsedGradYear = editGradYear.trim() ? Number(editGradYear) : null
+    const parsedWeight = editWeight.trim() ? Number(editWeight) : null
+    const parsedForty = editFortyYardDash.trim() ? Number(editFortyYardDash) : null
+    const parsedShuttle = editProShuttle.trim() ? Number(editProShuttle) : null
 
     const { error } = await supabase
       .from('athletes')
@@ -200,6 +249,10 @@ export default function PlayersPage() {
         positions: parsedPositions,
         team_level: editTeamLevel.trim() || null,
         tags: parsedTags,
+        height: editHeight.trim() || null,
+        weight: parsedWeight,
+        forty_yard_dash: parsedForty,
+        pro_shuttle: parsedShuttle,
       })
       .eq('id', playerId)
 
@@ -431,6 +484,41 @@ export default function PlayersPage() {
 
             <input
               type="text"
+              placeholder={`Height (example: 6'1")`}
+              value={height}
+              onChange={(e) => setHeight(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="number"
+              step="0.1"
+              placeholder="Weight"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="number"
+              step="0.01"
+              placeholder="40-yard dash"
+              value={fortyYardDash}
+              onChange={(e) => setFortyYardDash(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="number"
+              step="0.01"
+              placeholder="Pro shuttle"
+              value={proShuttle}
+              onChange={(e) => setProShuttle(e.target.value)}
+              style={inputStyle}
+            />
+
+            <input
+              type="text"
               placeholder="Positions (comma separated)"
               value={positions}
               onChange={(e) => setPositions(e.target.value)}
@@ -589,6 +677,41 @@ export default function PlayersPage() {
 
                       <input
                         type="text"
+                        placeholder={`Height (example: 6'1")`}
+                        value={editHeight}
+                        onChange={(e) => setEditHeight(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="Weight"
+                        value={editWeight}
+                        onChange={(e) => setEditWeight(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="40-yard dash"
+                        value={editFortyYardDash}
+                        onChange={(e) => setEditFortyYardDash(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Pro shuttle"
+                        value={editProShuttle}
+                        onChange={(e) => setEditProShuttle(e.target.value)}
+                        style={inputStyle}
+                      />
+
+                      <input
+                        type="text"
                         placeholder="Positions (comma separated)"
                         value={editPositions}
                         onChange={(e) => setEditPositions(e.target.value)}
@@ -644,6 +767,16 @@ export default function PlayersPage() {
 
                     <p style={{ margin: '4px 0' }}>
                       <strong>Grade:</strong> {player.grad_year ?? '-'}
+                    </p>
+
+                    <p style={{ margin: '4px 0' }}>
+                      <strong>Height:</strong> {player.height || '—'} &nbsp; | &nbsp;
+                      <strong>Weight:</strong> {player.weight ?? '—'} lbs
+                    </p>
+
+                    <p style={{ margin: '4px 0' }}>
+                      <strong>40:</strong> {formatTime(player.forty_yard_dash)} &nbsp; | &nbsp;
+                      <strong>Shuttle:</strong> {formatTime(player.pro_shuttle)}
                     </p>
 
                     <p style={{ margin: '4px 0' }}>

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, usePathname, useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { supabase } from '../../../../lib/supabase'
 
@@ -11,6 +11,10 @@ type Athlete = {
   last_name: string
   team_level: string | null
   profile_image_path: string | null
+  height: string | null
+  weight: number | null
+  forty_yard_dash: number | null
+  pro_shuttle: number | null
 }
 
 type PlayerLiftMax = {
@@ -60,12 +64,29 @@ type MaxSubmission = {
   created_at?: string
 }
 
+function formatTime(value: number | null | undefined) {
+  if (value === null || value === undefined) return '—'
+  return Number(value).toFixed(2)
+}
+
 export default function Page() {
   const router = useRouter()
   const params = useParams()
-const athleteId = Array.isArray(params?.athleteId)
-  ? params.athleteId[0]
-  : params?.athleteId
+  const pathname = usePathname()
+
+  const athleteIdFromParams =
+    typeof params?.athleteId === 'string'
+      ? params.athleteId
+      : typeof params?.id === 'string'
+      ? params.id
+      : Array.isArray(params?.athleteId)
+      ? params.athleteId[0]
+      : Array.isArray(params?.id)
+      ? params.id[0]
+      : undefined
+
+  const athleteIdFromPath = pathname?.split('/').filter(Boolean).pop()
+  const athleteId = athleteIdFromParams || athleteIdFromPath
 
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
@@ -84,12 +105,13 @@ const athleteId = Array.isArray(params?.athleteId)
   async function loadPlayerDetail() {
     setLoading(true)
     setMessage('')
-    
-if (!athleteId) {
-  setMessage('Missing athlete id in route.')
-  setLoading(false)
-  return
-}
+
+    if (!athleteId || athleteId === 'players') {
+      setMessage(`Missing athlete id in route. Path: ${pathname}`)
+      setLoading(false)
+      return
+    }
+
     const {
       data: { user },
       error: userError,
@@ -118,7 +140,9 @@ if (!athleteId) {
 
     const { data: athleteData, error: athleteError } = await supabase
       .from('athletes')
-      .select('id, first_name, last_name, team_level, profile_image_path')
+      .select(
+        'id, first_name, last_name, team_level, profile_image_path, height, weight, forty_yard_dash, pro_shuttle'
+      )
       .eq('id', athleteId)
       .maybeSingle()
 
@@ -309,10 +333,19 @@ if (!athleteId) {
             <div>
               <h1 style={{ margin: '0 0 8px 0', fontSize: 34 }}>Player Detail</h1>
               {athlete && (
-                <p style={{ color: '#cbd5e1', margin: 0, fontSize: 16 }}>
-                  {athlete.first_name} {athlete.last_name}
-                  {athlete.team_level ? ` • ${athlete.team_level}` : ''}
-                </p>
+                <div style={{ color: '#cbd5e1', fontSize: 16 }}>
+                  <p style={{ margin: 0 }}>
+                    {athlete.first_name} {athlete.last_name}
+                    {athlete.team_level ? ` • ${athlete.team_level}` : ''}
+                  </p>
+
+                  <p style={{ margin: '6px 0 0 0', color: '#94a3b8', fontSize: 14 }}>
+                    Height: {athlete.height || '—'} &nbsp; | &nbsp;
+                    Weight: {athlete.weight ?? '—'} lbs &nbsp; | &nbsp;
+                    40: {formatTime(athlete.forty_yard_dash)} &nbsp; | &nbsp;
+                    Shuttle: {formatTime(athlete.pro_shuttle)}
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -320,6 +353,9 @@ if (!athleteId) {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <a href="/admin" style={navLinkStyle}>
               Admin Home
+            </a>
+            <a href="/admin/players" style={navLinkStyle}>
+              Players
             </a>
             <a href="/admin/leaderboard" style={navLinkStyle}>
               Leaderboard
@@ -351,6 +387,25 @@ if (!athleteId) {
         <StatCard label="Current Maxes" value={String(maxes.length)} />
         <StatCard label="Total Weight Lifted" value={String(totalWeightLifted)} />
         <StatCard label="Most Logged Lift" value={favoriteLift} />
+      </div>
+
+      <div style={panelStyle}>
+        <h2 style={{ marginTop: 0 }}>Athletic Profile</h2>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <MiniStat label="Height" value={athlete?.height || '—'} />
+          <MiniStat
+            label="Weight"
+            value={athlete?.weight !== null && athlete?.weight !== undefined ? `${athlete.weight}` : '—'}
+          />
+          <MiniStat label="40 Yard Dash" value={formatTime(athlete?.forty_yard_dash)} />
+          <MiniStat label="Pro Shuttle" value={formatTime(athlete?.pro_shuttle)} />
+        </div>
       </div>
 
       <div style={panelStyle}>

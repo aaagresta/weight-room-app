@@ -157,10 +157,13 @@ export default function AdminPage() {
           <p style={cardTextStyle}>Run today’s lift, track attendance, and control the room.</p>
         </a>
 
-        <a href="/admin/lifts" style={cardStyle}>
-          <h2 style={cardTitleStyle}>Lift Logs</h2>
-          <p style={cardTextStyle}>Record and review player lift data.</p>
-        </a>
+        <a href="/admin/leaderboard" style={cardStyle}>
+  <h2 style={cardTitleStyle}>Team Leaderboard</h2>
+</a>
+
+    <a href="/admin/attendance-report" style={cardStyle}>
+  <h2 style={cardTitleStyle}>Attendance Report</h2>
+</a>
 
         <a href="/admin/max-submissions" style={cardStyle}>
   <h2 style={cardTitleStyle}>Max Submissions</h2>
@@ -190,4 +193,13 @@ const cardTitleStyle: React.CSSProperties = {
 const cardTextStyle: React.CSSProperties = {
   margin: 0,
   color: '#a1a1aa',
+}
+const navLinkStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 12,
+  border: '1px solid #475569',
+  backgroundColor: 'rgba(15,23,42,0.85)',
+  color: '#ffffff',
+  textDecoration: 'none',
+  display: 'inline-block',
 }

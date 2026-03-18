@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 
+
 type Row = {
   day_exercise_id: string;
   sort_order: number;

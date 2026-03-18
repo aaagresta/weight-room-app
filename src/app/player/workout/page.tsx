@@ -62,6 +62,7 @@ export default function PlayerWorkoutPage() {
   const today = new Date().toISOString().split('T')[0]
 
   const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState('')
 
   const [athlete, setAthlete] = useState<Athlete | null>(null)
@@ -70,7 +71,7 @@ export default function PlayerWorkoutPage() {
   const [maxes, setMaxes] = useState<PlayerLiftMax[]>([])
 
   const [formState, setFormState] = useState<
-    Record<string, { weight: string; reps: string; notes: string }>
+    Record<string, { weight: string; notes: string }>
   >({})
 
   useEffect(() => {
@@ -189,13 +190,12 @@ export default function PlayerWorkoutPage() {
     setLogs(savedLogs)
     setMaxes(savedMaxes)
 
-    const nextFormState: Record<string, { weight: string; reps: string; notes: string }> = {}
+    const nextFormState: Record<string, { weight: string; notes: string }> = {}
 
     savedLogs.forEach((log) => {
       const key = `${log.exercise}__${log.set_number}`
       nextFormState[key] = {
         weight: log.weight?.toString() || '',
-        reps: log.reps_completed?.toString() || '',
         notes: log.notes || '',
       }
     })
@@ -211,7 +211,7 @@ export default function PlayerWorkoutPage() {
   function updateSetField(
     exerciseName: string,
     setNumber: number,
-    field: 'weight' | 'reps' | 'notes',
+    field: 'weight' | 'notes',
     value: string
   ) {
     const key = getSetKey(exerciseName, setNumber)
@@ -220,7 +220,6 @@ export default function PlayerWorkoutPage() {
       ...prev,
       [key]: {
         weight: prev[key]?.weight || '',
-        reps: prev[key]?.reps || '',
         notes: prev[key]?.notes || '',
         [field]: value,
       },
@@ -229,9 +228,11 @@ export default function PlayerWorkoutPage() {
 
   function findLiftMax(liftName: string | null) {
     if (!liftName) return null
-    return maxes.find(
-      (max) => max.lift_name.trim().toLowerCase() === liftName.trim().toLowerCase()
-    ) || null
+    return (
+      maxes.find(
+        (max) => max.lift_name.trim().toLowerCase() === liftName.trim().toLowerCase()
+      ) || null
+    )
   }
 
   function calculateTargetWeight(percent: number | null, liftName: string | null) {
@@ -245,55 +246,66 @@ export default function PlayerWorkoutPage() {
     return rounded
   }
 
-  async function saveSet(
-    exerciseName: string,
-    setNumber: number,
-    targetReps: number,
-    percent: number | null,
-    maxLift: string | null
-  ) {
+  async function submitWorkout() {
     if (!athlete || !workout) return
 
-    const key = getSetKey(exerciseName, setNumber)
-    const current = formState[key] || { weight: '', reps: '', notes: '' }
+    setSubmitting(true)
+    setMessage('')
 
-    const calculatedTargetWeight = calculateTargetWeight(percent, maxLift)
-    const weightValue =
-      current.weight.trim() !== ''
-        ? Number(current.weight)
-        : calculatedTargetWeight !== null
-        ? calculatedTargetWeight
-        : null
+    const payload: any[] = []
 
-    const repsValue = current.reps.trim() ? Number(current.reps) : null
-    const notesValue = current.notes.trim() || null
+    for (const exercise of workout.workout_data?.exercises || []) {
+      for (const set of exercise.sets || []) {
+        const key = getSetKey(exercise.name, set.setNumber)
+        const current = formState[key] || { weight: '', notes: '' }
 
-    const { error } = await supabase.from('player_workout_logs').upsert(
-      [
-        {
+        const calculatedTargetWeight = calculateTargetWeight(set.percent, set.maxLift)
+
+        const weightValue =
+          current.weight.trim() !== ''
+            ? Number(current.weight)
+            : calculatedTargetWeight !== null
+            ? calculatedTargetWeight
+            : null
+
+        const notesValue = current.notes.trim() || null
+
+        const hasAnyValue = weightValue !== null || notesValue !== null
+        if (!hasAnyValue) continue
+
+        payload.push({
           athlete_id: athlete.id,
           workout_id: workout.id,
           workout_date: workout.workout_date,
-          exercise: exerciseName,
-          set_number: setNumber,
-          target_reps: targetReps,
-          reps_completed: repsValue,
+          exercise: exercise.name,
+          set_number: set.setNumber,
+          target_reps: set.targetReps,
+          reps_completed: null,
           weight: weightValue,
           notes: notesValue,
-        },
-      ],
-      {
-        onConflict: 'athlete_id,workout_id,exercise,set_number',
+        })
       }
-    )
+    }
 
-    if (error) {
-      setMessage(`Error saving set: ${error.message}`)
+    if (payload.length === 0) {
+      setMessage('Please enter at least one set before submitting.')
+      setSubmitting(false)
       return
     }
 
-    setMessage(`Saved ${exerciseName} set ${setNumber}.`)
+    const { error } = await supabase.from('player_workout_logs').upsert(payload, {
+      onConflict: 'athlete_id,workout_id,exercise,set_number',
+    })
+
+    if (error) {
+      setMessage(`Error submitting workout: ${error.message}`)
+      setSubmitting(false)
+      return
+    }
+
+    setMessage('Workout submitted successfully.')
     await loadPlayerWorkout()
+    setSubmitting(false)
   }
 
   const completedSetCount = useMemo(() => {
@@ -307,280 +319,309 @@ export default function PlayerWorkoutPage() {
 
   if (loading) {
     return (
-      <div
-        style={{
-          padding: 24,
-          backgroundColor: '#000000',
-          minHeight: '100vh',
-          color: '#ffffff',
-        }}
-      >
-        Loading...
+      <div style={pageStyle}>
+        <div style={shellStyle}>Loading...</div>
       </div>
     )
   }
 
   return (
-    <div
-      style={{
-        padding: 24,
-        backgroundColor: '#000000',
-        minHeight: '100vh',
-        color: '#ffffff',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 16,
-          flexWrap: 'wrap',
-          marginBottom: 20,
-        }}
-      >
-        <div>
-          <h1 style={{ marginBottom: 8 }}>My Workout</h1>
+    <div style={pageStyle}>
+      <div style={shellStyle}>
+        <div style={headerStyle}>
+          <div>
+            <h1 style={{ marginBottom: 8 }}>My Workout</h1>
 
-          {athlete && (
-            <p style={{ color: '#a1a1aa', margin: 0 }}>
-              {athlete.first_name} {athlete.last_name}
-              {athlete.team_level ? ` • ${athlete.team_level}` : ''}
-            </p>
-          )}
-        </div>
-          <a href="/player/dashboard" style={{
-              padding: '10px 14px',
-              borderRadius: 10,
-              border: '1px solid #52525b',
-              backgroundColor: '#18181b',
-              color: '#ffffff',
-              textDecoration: 'none',
-          }}>
-            Dashboard
-</a>
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: '10px 14px',
-            borderRadius: 10,
-            border: '1px solid #991b1b',
-            backgroundColor: '#991b1b',
-            color: '#ffffff',
-            cursor: 'pointer',
-          }}
-        >
-          Log Out
-        </button>
-      </div>
-
-      {message && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: 12,
-            borderRadius: 10,
-            backgroundColor: '#18181b',
-            border: '1px solid #3f3f46',
-            color:
-              message.startsWith('Error') || message.startsWith('Could not')
-                ? '#f87171'
-                : '#4ade80',
-          }}
-        >
-          {message}
-        </div>
-      )}
-
-      {!workout ? (
-        <div
-          style={{
-            border: '1px solid #3f3f46',
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 20,
-            backgroundColor: '#18181b',
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>No Workout Assigned</h2>
-          <p style={{ color: '#d4d4d8' }}>
-            There is no workout assigned for your team today.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 12,
-              marginBottom: 20,
-            }}
-          >
-            <StatCard label="Workout" value={workout.title} />
-            <StatCard label="Date" value={workout.workout_date} />
-            <StatCard label="Completed Sets" value={`${completedSetCount}/${totalSetCount}`} />
+            {athlete && (
+              <p style={{ color: '#a1a1aa', margin: 0 }}>
+                {athlete.first_name} {athlete.last_name}
+                {athlete.team_level ? ` • ${athlete.team_level}` : ''}
+              </p>
+            )}
           </div>
 
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a href="/player/dashboard" style={dashboardLinkStyle}>
+              Dashboard
+            </a>
+
+            <button onClick={handleLogout} style={logoutButtonStyle}>
+              Log Out
+            </button>
+          </div>
+        </div>
+
+        {message && (
           <div
             style={{
-              border: '1px solid #3f3f46',
-              borderRadius: 12,
-              padding: 16,
-              marginBottom: 20,
+              marginBottom: 16,
+              padding: 12,
+              borderRadius: 10,
               backgroundColor: '#18181b',
+              border: '1px solid #3f3f46',
+              color:
+                message.startsWith('Error') || message.startsWith('Could not')
+                  ? '#f87171'
+                  : '#4ade80',
             }}
           >
-            <h2 style={{ marginTop: 0 }}>{workout.title}</h2>
+            {message}
+          </div>
+        )}
 
-            <div style={{ display: 'grid', gap: 16 }}>
-              {workout.workout_data?.exercises?.map((exercise, exerciseIndex) => (
-                <div
-                  key={exerciseIndex}
-                  style={{
-                    border: '1px solid #52525b',
-                    borderRadius: 12,
-                    padding: 16,
-                    backgroundColor: '#27272a',
-                  }}
-                >
-                  <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12 }}>
-                    {exercise.name}
-                  </div>
+        {!workout ? (
+          <div style={panelStyle}>
+            <h2 style={{ marginTop: 0 }}>No Workout Assigned</h2>
+            <p style={{ color: '#d4d4d8' }}>
+              There is no workout assigned for your team today.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div style={summaryBarStyle}>
+              <div style={summaryItemStyle}>
+                <div style={summaryLabelStyle}>Workout</div>
+                <div style={summaryValueStyle}>{workout.title}</div>
+              </div>
 
-                  <div style={{ display: 'grid', gap: 12 }}>
-                    {exercise.sets.map((set) => {
-                      const key = getSetKey(exercise.name, set.setNumber)
-                      const current = formState[key] || { weight: '', reps: '', notes: '' }
-                      const calculatedWeight = calculateTargetWeight(set.percent, set.maxLift)
+              <div style={summaryItemStyle}>
+                <div style={summaryLabelStyle}>Date</div>
+                <div style={summaryValueStyle}>{workout.workout_date}</div>
+              </div>
 
-                      return (
-                        <div
-                          key={set.setNumber}
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns: '1.2fr 160px 160px 1fr auto',
-                            gap: 10,
-                            alignItems: 'center',
-                            border: '1px solid #3f3f46',
-                            borderRadius: 10,
-                            padding: 12,
-                            backgroundColor: '#18181b',
-                          }}
-                        >
-                          <div>
-                            <div style={{ fontWeight: 700 }}>Set {set.setNumber}</div>
-                            <div style={{ color: '#a1a1aa', fontSize: 14 }}>
-                              Target: {set.targetReps} reps
-                              {set.useMax && set.percent !== null
-                                ? ` @ ${set.percent}%`
-                                : ''}
+              <div style={summaryItemStyle}>
+                <div style={summaryLabelStyle}>Completed</div>
+                <div style={summaryValueStyle}>
+                  {completedSetCount}/{totalSetCount}
+                </div>
+              </div>
+            </div>
+
+            <div style={panelStyle}>
+              <h2 style={{ marginTop: 0 }}>{workout.title}</h2>
+
+              <div style={{ display: 'grid', gap: 14 }}>
+                {workout.workout_data?.exercises?.map((exercise, exerciseIndex) => (
+                  <div key={exerciseIndex} style={exerciseCardStyle}>
+                    <div style={exerciseTitleStyle}>{exercise.name}</div>
+
+                    <div style={setListStyle}>
+                      {exercise.sets.map((set) => {
+                        const key = getSetKey(exercise.name, set.setNumber)
+                        const current = formState[key] || { weight: '', notes: '' }
+                        const calculatedWeight = calculateTargetWeight(set.percent, set.maxLift)
+
+                        return (
+                          <div key={set.setNumber} style={setCardStyle}>
+                            <div style={setHeaderStyle}>
+                              <div style={setNumberStyle}>Set {set.setNumber}</div>
+
+                              <div style={targetChipStyle}>
+                                {set.targetReps} reps
+                                {set.useMax && set.percent !== null ? ` @ ${set.percent}%` : ''}
+                              </div>
                             </div>
+
                             {set.useMax && (
-                              <div style={{ color: '#93c5fd', fontSize: 14, marginTop: 4 }}>
+                              <div style={targetWeightStyle}>
                                 Target Weight:{' '}
                                 {calculatedWeight !== null
                                   ? `${calculatedWeight} lbs`
                                   : 'No max found'}
                               </div>
                             )}
+
+                            <div style={mobileFieldStackStyle}>
+                              <div>
+                                <label style={labelStyle}>Weight</label>
+                                <input
+                                  type="number"
+                                  placeholder={
+                                    calculatedWeight !== null
+                                      ? `${calculatedWeight}`
+                                      : 'Enter weight'
+                                  }
+                                  value={current.weight}
+                                  onChange={(e) =>
+                                    updateSetField(
+                                      exercise.name,
+                                      set.setNumber,
+                                      'weight',
+                                      e.target.value
+                                    )
+                                  }
+                                  style={inputStyle}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={labelStyle}>Notes</label>
+                                <input
+                                  type="text"
+                                  placeholder="Optional notes"
+                                  value={current.notes}
+                                  onChange={(e) =>
+                                    updateSetField(
+                                      exercise.name,
+                                      set.setNumber,
+                                      'notes',
+                                      e.target.value
+                                    )
+                                  }
+                                  style={inputStyle}
+                                />
+                              </div>
+                            </div>
                           </div>
-
-                          <input
-                            type="number"
-                            placeholder={calculatedWeight !== null ? `${calculatedWeight}` : 'Weight'}
-                            value={current.weight}
-                            onChange={(e) =>
-                              updateSetField(exercise.name, set.setNumber, 'weight', e.target.value)
-                            }
-                            style={inputStyle}
-                          />
-
-                          <input
-                            type="number"
-                            placeholder="Actual reps"
-                            value={current.reps}
-                            onChange={(e) =>
-                              updateSetField(exercise.name, set.setNumber, 'reps', e.target.value)
-                            }
-                            style={inputStyle}
-                          />
-
-                          <input
-                            type="text"
-                            placeholder="Notes"
-                            value={current.notes}
-                            onChange={(e) =>
-                              updateSetField(exercise.name, set.setNumber, 'notes', e.target.value)
-                            }
-                            style={inputStyle}
-                          />
-
-                          <button
-                            onClick={() =>
-                              saveSet(
-                                exercise.name,
-                                set.setNumber,
-                                set.targetReps,
-                                set.percent,
-                                set.maxLift
-                              )
-                            }
-                            style={{
-                              padding: '10px 14px',
-                              borderRadius: 10,
-                              border: '1px solid #166534',
-                              backgroundColor: '#166534',
-                              color: '#ffffff',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Save Set
-                          </button>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+
+            <div style={submitBarStyle}>
+              <button
+                onClick={submitWorkout}
+                disabled={submitting}
+                style={submitWorkoutButtonStyle}
+              >
+                {submitting ? 'Submitting...' : 'Submit Workout'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      style={{
-        border: '1px solid #52525b',
-        borderRadius: 12,
-        padding: 16,
-        backgroundColor: '#18181b',
-      }}
-    >
-      <div
-        style={{
-          color: '#a1a1aa',
-          fontSize: 14,
-          marginBottom: 8,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          color: '#ffffff',
-          fontSize: 24,
-          fontWeight: 700,
-        }}
-      >
-        {value}
-      </div>
-    </div>
-  )
+const pageStyle: React.CSSProperties = {
+  padding: 16,
+  backgroundColor: '#000000',
+  minHeight: '100vh',
+  color: '#ffffff',
+}
+
+const shellStyle: React.CSSProperties = {
+  maxWidth: 720,
+  margin: '0 auto',
+}
+
+const headerStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  gap: 16,
+  flexWrap: 'wrap',
+  marginBottom: 20,
+}
+
+const panelStyle: React.CSSProperties = {
+  border: '1px solid #3f3f46',
+  borderRadius: 12,
+  padding: 14,
+  marginBottom: 20,
+  backgroundColor: '#18181b',
+}
+
+const summaryBarStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 8,
+  marginBottom: 16,
+}
+
+const summaryItemStyle: React.CSSProperties = {
+  border: '1px solid #3f3f46',
+  borderRadius: 10,
+  padding: 10,
+  backgroundColor: '#111827',
+  minWidth: 0,
+}
+
+const summaryLabelStyle: React.CSSProperties = {
+  color: '#a1a1aa',
+  fontSize: 11,
+  marginBottom: 6,
+  textTransform: 'uppercase',
+  letterSpacing: 0.5,
+}
+
+const summaryValueStyle: React.CSSProperties = {
+  color: '#ffffff',
+  fontSize: 14,
+  fontWeight: 700,
+  lineHeight: 1.2,
+  wordBreak: 'break-word',
+}
+
+const exerciseCardStyle: React.CSSProperties = {
+  border: '1px solid #52525b',
+  borderRadius: 12,
+  padding: 14,
+  backgroundColor: '#27272a',
+}
+
+const exerciseTitleStyle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 700,
+  marginBottom: 12,
+}
+
+const setListStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: 10,
+}
+
+const setCardStyle: React.CSSProperties = {
+  border: '1px solid #3f3f46',
+  borderRadius: 10,
+  padding: 12,
+  backgroundColor: '#18181b',
+}
+
+const setHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: 10,
+  flexWrap: 'wrap',
+  marginBottom: 8,
+}
+
+const setNumberStyle: React.CSSProperties = {
+  fontWeight: 700,
+  fontSize: 16,
+}
+
+const targetChipStyle: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '6px 10px',
+  borderRadius: 999,
+  backgroundColor: '#27272a',
+  border: '1px solid #52525b',
+  color: '#d4d4d8',
+  fontSize: 13,
+}
+
+const targetWeightStyle: React.CSSProperties = {
+  color: '#93c5fd',
+  fontSize: 14,
+  marginBottom: 10,
+}
+
+const mobileFieldStackStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: 10,
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: 6,
+  color: '#d4d4d8',
+  fontSize: 13,
 }
 
 const inputStyle: React.CSSProperties = {
@@ -590,4 +631,40 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid #52525b',
   backgroundColor: '#27272a',
   color: '#ffffff',
+  boxSizing: 'border-box',
+}
+
+const submitBarStyle: React.CSSProperties = {
+  marginTop: 12,
+  marginBottom: 20,
+}
+
+const submitWorkoutButtonStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '14px 16px',
+  borderRadius: 12,
+  border: '1px solid #166534',
+  backgroundColor: '#166534',
+  color: '#ffffff',
+  cursor: 'pointer',
+  fontWeight: 700,
+  fontSize: 16,
+}
+
+const dashboardLinkStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#18181b',
+  color: '#ffffff',
+  textDecoration: 'none',
+}
+
+const logoutButtonStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #991b1b',
+  backgroundColor: '#991b1b',
+  color: '#ffffff',
+  cursor: 'pointer',
 }

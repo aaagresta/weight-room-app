@@ -84,6 +84,7 @@ const athleteId = Array.isArray(params?.athleteId)
   async function loadPlayerDetail() {
     setLoading(true)
     setMessage('')
+    
 if (!athleteId) {
   setMessage('Missing athlete id in route.')
   setLoading(false)

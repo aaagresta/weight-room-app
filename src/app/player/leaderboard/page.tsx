@@ -9,6 +9,10 @@ type Athlete = {
   first_name: string
   last_name: string
   team_level: string | null
+  height: string | null
+  weight: number | null
+  forty_yard_dash: number | null
+  pro_shuttle: number | null
 }
 
 type Profile = {
@@ -50,6 +54,13 @@ type AttendanceLeaderboardEntry = {
   attendanceRate: number
 }
 
+type SpeedLeaderboardEntry = {
+  athlete_id: string
+  player_name: string
+  team_level: string | null
+  time: number
+}
+
 const MAIN_LIFTS = [
   'Bench Press',
   'Back Squat',
@@ -58,7 +69,9 @@ const MAIN_LIFTS = [
   'Front Squat',
   'Overhead Press',
 ]
-
+function formatTime(value: number) {
+  return value.toFixed(2)
+}
 export default function Page() {
   const router = useRouter()
 
@@ -140,7 +153,9 @@ export default function Page() {
     const [athletesResult, maxesResult, attendanceResult] = await Promise.all([
       supabase
         .from('athletes')
-        .select('id, first_name, last_name, team_level')
+        .select(
+          'id, first_name, last_name, team_level, height, weight, forty_yard_dash, pro_shuttle'
+        )
         .in('id', approvedAthleteIds),
 
       supabase
@@ -290,6 +305,38 @@ export default function Page() {
       .slice(0, 10)
   }, [attendanceLogs, athleteMap, filteredAthleteIds])
 
+  const fortyLeaderboard = useMemo((): SpeedLeaderboardEntry[] => {
+    return filteredAthletes
+      .filter(
+        (athlete) =>
+          athlete.forty_yard_dash !== null && athlete.forty_yard_dash !== undefined
+      )
+      .map((athlete) => ({
+        athlete_id: athlete.id,
+        player_name: `${athlete.first_name} ${athlete.last_name}`,
+        team_level: athlete.team_level,
+        time: Number(athlete.forty_yard_dash),
+      }))
+      .sort((a, b) => a.time - b.time)
+      .slice(0, 10)
+  }, [filteredAthletes])
+
+  const shuttleLeaderboard = useMemo((): SpeedLeaderboardEntry[] => {
+    return filteredAthletes
+      .filter(
+        (athlete) =>
+          athlete.pro_shuttle !== null && athlete.pro_shuttle !== undefined
+      )
+      .map((athlete) => ({
+        athlete_id: athlete.id,
+        player_name: `${athlete.first_name} ${athlete.last_name}`,
+        team_level: athlete.team_level,
+        time: Number(athlete.pro_shuttle),
+      }))
+      .sort((a, b) => a.time - b.time)
+      .slice(0, 10)
+  }, [filteredAthletes])
+
   if (loading) {
     return (
       <div style={pageStyle}>
@@ -306,7 +353,7 @@ export default function Page() {
           <div>
             <h1 style={{ margin: '0 0 8px 0', fontSize: 34 }}>Team Leaderboard</h1>
             <p style={{ color: '#cbd5e1', margin: 0, fontSize: 16 }}>
-              Top 10 max lifts and top 10 attendance percentages
+              Top 10 max lifts, attendance, 40-yard dash, and pro shuttle
             </p>
           </div>
 
@@ -321,7 +368,7 @@ export default function Page() {
         </div>
 
         <div style={heroSubStyle}>
-          Leaderboards use official maxes and attendance logs already stored in the app.
+          Lifts rank highest first. Speed times rank lowest first.
         </div>
       </div>
 
@@ -388,6 +435,61 @@ export default function Page() {
                     {entry.presentCount + entry.lateCount}/{entry.totalCount}
                   </div>
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={panelStyle}>
+        <h2 style={{ marginTop: 0 }}>40 Yard Dash</h2>
+
+        {fortyLeaderboard.length === 0 ? (
+          <p style={{ color: '#d4d4d8' }}>No 40 times found.</p>
+        ) : (
+          <div style={leaderboardGridStyle}>
+            {fortyLeaderboard.map((entry, index) => (
+              <div key={`forty-${entry.athlete_id}`} style={leaderboardCardStyle}>
+                <div style={leaderboardTopRowStyle}>
+                  <div style={smallRankStyle}>#{index + 1}</div>
+                  <div style={teamPillStyle}>{entry.team_level || 'No Team'}</div>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, fontSize: 17 }}>{entry.player_name}</div>
+                </div>
+
+                <div>
+                  <div style={smallLabelStyle}>40 Time</div>
+<div style={leaderboardValueStyle}>{formatTime(entry.time)}</div>             
+   </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={panelStyle}>
+        <h2 style={{ marginTop: 0 }}>Pro Shuttle</h2>
+
+        {shuttleLeaderboard.length === 0 ? (
+          <p style={{ color: '#d4d4d8' }}>No shuttle times found.</p>
+        ) : (
+          <div style={leaderboardGridStyle}>
+            {shuttleLeaderboard.map((entry, index) => (
+              <div key={`shuttle-${entry.athlete_id}`} style={leaderboardCardStyle}>
+                <div style={leaderboardTopRowStyle}>
+                  <div style={smallRankStyle}>#{index + 1}</div>
+                  <div style={teamPillStyle}>{entry.team_level || 'No Team'}</div>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, fontSize: 17 }}>{entry.player_name}</div>
+                </div>
+
+                <div>
+                  <div style={smallLabelStyle}>Shuttle Time</div>
+<div style={leaderboardValueStyle}>{formatTime(entry.time)}</div>                </div>
               </div>
             ))}
           </div>

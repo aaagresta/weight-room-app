@@ -72,8 +72,8 @@ export default function SessionPage() {
   const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({})
   const [pods, setPods] = useState<Pod[]>([])
 
-  const [minutes, setMinutes] = useState(3)
-  const [secondsLeft, setSecondsLeft] = useState(180)
+  const [minutes, setMinutes] = useState(10)
+  const [secondsLeft, setSecondsLeft] = useState(10 * 60)
   const [timerRunning, setTimerRunning] = useState(false)
 
   const [availableWorkouts, setAvailableWorkouts] = useState<DailyWorkout[]>([])
@@ -191,7 +191,7 @@ export default function SessionPage() {
           session_date: today,
           team: 'All',
           rack_count: 6,
-          timer_seconds: 180,
+          timer_seconds: 10 * 60,
           timer_running: false,
           pods: [],
           attendance_map: {},
@@ -212,12 +212,15 @@ export default function SessionPage() {
   }
 
   function hydrateLiveSession(session: LiveRoomSession) {
+    const safeSeconds = session.timer_seconds && session.timer_seconds > 0 ? session.timer_seconds : 10 * 60
+    const safeMinutes = Math.min(60, Math.max(1, Math.round(safeSeconds / 60)))
+
     setLiveSessionId(session.id)
     setSelectedDate(session.session_date || today)
     setTeamFilter(session.team || 'All')
     setRackCount(session.rack_count || 6)
-    setSecondsLeft(session.timer_seconds || 180)
-    setMinutes(Math.max(1, Math.round((session.timer_seconds || 180) / 60)))
+    setSecondsLeft(safeSeconds)
+    setMinutes(safeMinutes)
     setTimerRunning(session.timer_running || false)
     setPods((session.pods as Pod[]) || [])
     setAttendanceMap((session.attendance_map as Record<string, AttendanceStatus>) || {})
@@ -375,36 +378,37 @@ export default function SessionPage() {
     setMessage('Empty pods created. Drag players into pods or use auto assign.')
   }
 
- function autoAssignPods() {
-  if (pods.length === 0) {
-    setMessage('Create pods first.')
-    return
-  }
-
-  const athletes: Athlete[] = [...presentPlayers]
-
-  if (athletes.length === 0) {
-    setMessage('Mark at least one player Present or Late before assigning pods.')
-    return
-  }
-
-  const clearedPods: Pod[] = pods.map((pod) => ({
-    ...pod,
-    players: [] as Athlete[],
-  }))
-
-  athletes.forEach((athlete, index) => {
-    const podIndex = index % clearedPods.length
-    const pod = clearedPods[podIndex]
-
-    if (pod) {
-      pod.players.push(athlete)
+  function autoAssignPods() {
+    if (pods.length === 0) {
+      setMessage('Create pods first.')
+      return
     }
-  })
 
-  setPods(clearedPods)
-  setMessage('Players auto assigned to pods.')
-}
+    const athletes: Athlete[] = [...presentPlayers]
+
+    if (athletes.length === 0) {
+      setMessage('Mark at least one player Present or Late before assigning pods.')
+      return
+    }
+
+    const clearedPods: Pod[] = pods.map((pod) => ({
+      ...pod,
+      players: [] as Athlete[],
+    }))
+
+    athletes.forEach((athlete, index) => {
+      const podIndex = index % clearedPods.length
+      const pod = clearedPods[podIndex]
+
+      if (pod) {
+        pod.players.push(athlete)
+      }
+    })
+
+    setPods(clearedPods)
+    setMessage('Players auto assigned to pods.')
+  }
+
   function removePlayerFromPods(playerId: string) {
     setPods((prev) =>
       prev.map((pod) => ({
@@ -491,9 +495,17 @@ export default function SessionPage() {
   }
 
   function applyTimerMinutes(value: number) {
-    setMinutes(value)
-    setSecondsLeft(value * 60)
+    const safeValue = Math.min(60, Math.max(1, value))
+    setMinutes(safeValue)
+    setSecondsLeft(safeValue * 60)
     setTimerRunning(false)
+  }
+
+  function adjustTimerMinutes(delta: number) {
+    if (timerRunning) return
+    const next = Math.min(60, Math.max(1, minutes + delta))
+    setMinutes(next)
+    setSecondsLeft(next * 60)
   }
 
   const formattedTime = `${String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:${String(
@@ -656,20 +668,42 @@ export default function SessionPage() {
       </div>
 
       <div style={timerPanelStyle}>
-        <h2 style={{ marginTop: 0 }}>Live Lift Timer</h2>
-
-        <div style={timerBoardStyle}>
-          <div style={{ fontSize: 18, color: '#a1a1aa', marginBottom: 8 }}>Current Interval</div>
-          <div style={timerTextStyle}>{formattedTime}</div>
-          <div style={{ color: secondsLeft === 0 ? '#f87171' : '#4ade80', fontWeight: 700 }}>
-            {secondsLeft === 0 ? 'Time is up — rotate racks' : timerRunning ? 'Timer running' : 'Timer paused'}
+        <div style={timerHeaderStyle}>
+          <div>
+            <h2 style={{ margin: '0 0 6px 0' }}>Live Lift Timer</h2>
+            <div style={{ color: '#a1a1aa', fontSize: 14 }}>
+              Set any timer from 1 to 60 minutes
+            </div>
           </div>
+
+          <div style={timerBoardStyle}>
+            <div style={{ fontSize: 18, color: '#a1a1aa', marginBottom: 8 }}>Current Interval</div>
+            <div style={timerTextStyle}>{formattedTime}</div>
+            <div style={{ color: secondsLeft === 0 ? '#f87171' : '#4ade80', fontWeight: 700 }}>
+              {secondsLeft === 0 ? 'Time is up — rotate racks' : timerRunning ? 'Timer running' : 'Timer paused'}
+            </div>
+          </div>
+        </div>
+
+        <div style={presetRowStyle}>
+          {[5, 10, 15, 20].map((preset) => (
+            <button
+              key={preset}
+              onClick={() => applyTimerMinutes(preset)}
+              style={{
+                ...presetButtonStyle,
+                ...(minutes === preset ? presetButtonActiveStyle : {}),
+              }}
+            >
+              {preset} min
+            </button>
+          ))}
         </div>
 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: 12,
             marginTop: 16,
             marginBottom: 12,
@@ -681,14 +715,34 @@ export default function SessionPage() {
               value={minutes}
               onChange={(e) => applyTimerMinutes(Number(e.target.value))}
               style={inputStyle}
+              disabled={timerRunning}
             >
-              <option value={1}>1 Minute</option>
-              <option value={2}>2 Minutes</option>
-              <option value={3}>3 Minutes</option>
-              <option value={4}>4 Minutes</option>
-              <option value={5}>5 Minutes</option>
-              <option value={6}>6 Minutes</option>
+              {Array.from({ length: 60 }, (_, i) => i + 1).map((minute) => (
+                <option key={minute} value={minute}>
+                  {minute} minute{minute === 1 ? '' : 's'}
+                </option>
+              ))}
             </select>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Quick Adjust</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => adjustTimerMinutes(-1)}
+                style={smallTimerButtonStyle}
+                disabled={timerRunning || minutes <= 1}
+              >
+                -1 min
+              </button>
+              <button
+                onClick={() => adjustTimerMinutes(1)}
+                style={smallTimerButtonStyle}
+                disabled={timerRunning || minutes >= 60}
+              >
+                +1 min
+              </button>
+            </div>
           </div>
         </div>
 
@@ -956,12 +1010,21 @@ const timerPanelStyle: React.CSSProperties = {
   backgroundColor: '#111827',
 }
 
+const timerHeaderStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  gap: 16,
+  flexWrap: 'wrap',
+}
+
 const timerBoardStyle: React.CSSProperties = {
   border: '1px solid #374151',
   borderRadius: 12,
   padding: 24,
   backgroundColor: '#030712',
   textAlign: 'center',
+  minWidth: 220,
 }
 
 const timerTextStyle: React.CSSProperties = {
@@ -969,6 +1032,27 @@ const timerTextStyle: React.CSSProperties = {
   fontWeight: 800,
   letterSpacing: 2,
   marginBottom: 10,
+}
+
+const presetRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+  marginTop: 16,
+}
+
+const presetButtonStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const presetButtonActiveStyle: React.CSSProperties = {
+  border: '1px solid #1d4ed8',
+  backgroundColor: '#1d4ed8',
 }
 
 const labelStyle: React.CSSProperties = {
@@ -1074,4 +1158,13 @@ const dropPodStyle: React.CSSProperties = {
   padding: 16,
   backgroundColor: '#18181b',
   minHeight: 220,
+}
+
+const smallTimerButtonStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+  cursor: 'pointer',
 }

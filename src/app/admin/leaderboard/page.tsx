@@ -358,7 +358,11 @@ export default function Page() {
         ) : (
           <div style={leaderboardGridStyle}>
             {attendanceLeaderboard.map((entry, index) => (
-              <div key={entry.athlete_id} style={leaderboardCardStyle}>
+              <div
+  key={entry.athlete_id}
+  style={{ ...leaderboardCardStyle, cursor: 'pointer' }}
+  onClick={() => router.push(`/admin/players/${entry.athlete_id}`)}
+>
                 <div style={leaderboardTopRowStyle}>
                   <div style={smallRankStyle}>#{index + 1}</div>
                   <div style={teamPillStyle}>{entry.team_level || 'No Team'}</div>
@@ -397,7 +401,11 @@ export default function Page() {
             ) : (
               <div style={leaderboardGridStyle}>
                 {entries.map((entry, index) => (
-                  <div key={`${lift}-${entry.athlete_id}`} style={leaderboardCardStyle}>
+                  <div
+  key={`${lift}-${entry.athlete_id}`}
+  style={{ ...leaderboardCardStyle, cursor: 'pointer' }}
+  onClick={() => router.push(`/admin/players/${entry.athlete_id}`)}
+>
                     <div style={leaderboardTopRowStyle}>
                       <div style={smallRankStyle}>#{index + 1}</div>
                       <div style={teamPillStyle}>{entry.team_level || 'No Team'}</div>

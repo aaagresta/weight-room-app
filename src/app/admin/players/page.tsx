@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../../../lib/supabase'
 
 type Athlete = {
@@ -30,6 +31,8 @@ type AttendanceStats = {
 }
 
 export default function PlayersPage() {
+  const router = useRouter()
+
   const [players, setPlayers] = useState<Athlete[]>([])
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([])
   const [loading, setLoading] = useState(true)
@@ -248,6 +251,10 @@ export default function PlayersPage() {
     } else {
       await loadData()
     }
+  }
+
+  function openPlayerProfile(athleteId: string) {
+    router.push(`/admin/players/${athleteId}`)
   }
 
   const attendanceStatsMap = useMemo(() => {
@@ -528,10 +535,16 @@ export default function PlayersPage() {
                   backgroundColor: '#3f3f46',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
                   color: '#ffffff',
+                  cursor: editingPlayerId === player.id ? 'default' : 'pointer',
+                }}
+                onClick={() => {
+                  if (editingPlayerId !== player.id) {
+                    openPlayerProfile(player.id)
+                  }
                 }}
               >
                 {editingPlayerId === player.id ? (
-                  <div>
+                  <div onClick={(e) => e.stopPropagation()}>
                     <h3 style={{ marginTop: 0 }}>Edit Player</h3>
 
                     <div
@@ -609,9 +622,21 @@ export default function PlayersPage() {
                   </div>
                 ) : (
                   <div>
-                    <h3 style={{ marginTop: 0, marginBottom: 6 }}>
-                      {player.first_name} {player.last_name}
-                    </h3>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                      <h3 style={{ marginTop: 0, marginBottom: 6 }}>
+                        {player.first_name} {player.last_name}
+                      </h3>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openPlayerProfile(player.id)
+                        }}
+                        style={viewProfileButtonStyle}
+                      >
+                        View Profile
+                      </button>
+                    </div>
 
                     <p style={{ margin: '4px 0' }}>
                       <strong>Team:</strong> {player.team_level || 'No team'}
@@ -656,21 +681,30 @@ export default function PlayersPage() {
 
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
                       <button
-                        onClick={() => handleMarkAttendance(player.id, 'PRESENT')}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleMarkAttendance(player.id, 'PRESENT')
+                        }}
                         style={attendancePresentButton}
                       >
                         Mark Present
                       </button>
 
                       <button
-                        onClick={() => handleMarkAttendance(player.id, 'LATE')}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleMarkAttendance(player.id, 'LATE')
+                        }}
                         style={attendanceLateButton}
                       >
                         Mark Late
                       </button>
 
                       <button
-                        onClick={() => handleMarkAttendance(player.id, 'ABSENT')}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleMarkAttendance(player.id, 'ABSENT')
+                        }}
                         style={attendanceAbsentButton}
                       >
                         Mark Absent
@@ -678,14 +712,21 @@ export default function PlayersPage() {
                     </div>
 
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <button onClick={() => startEditPlayer(player)} style={buttonStyle}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          startEditPlayer(player)
+                        }}
+                        style={buttonStyle}
+                      >
                         Edit
                       </button>
 
                       <button
-                        onClick={() =>
+                        onClick={(e) => {
+                          e.stopPropagation()
                           handleDeletePlayer(player.id, `${player.first_name} ${player.last_name}`)
-                        }
+                        }}
                         style={deleteButtonStyle}
                       >
                         Delete
@@ -796,6 +837,15 @@ const attendanceAbsentButton: React.CSSProperties = {
   borderRadius: 10,
   border: '1px solid #991b1b',
   backgroundColor: '#991b1b',
+  color: '#ffffff',
+  cursor: 'pointer',
+}
+
+const viewProfileButtonStyle: React.CSSProperties = {
+  padding: '10px 14px',
+  borderRadius: 10,
+  border: '1px solid #1d4ed8',
+  backgroundColor: '#1d4ed8',
   color: '#ffffff',
   cursor: 'pointer',
 }

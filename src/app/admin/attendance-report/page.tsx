@@ -294,8 +294,11 @@ export default function Page() {
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
             {attendanceRows.map((row, index) => (
-              <div key={row.athlete_id} style={reportRowStyle}>
-                <div style={reportRankStyle}>#{index + 1}</div>
+  <div
+    key={row.athlete_id}
+    style={{ ...reportRowStyle, cursor: 'pointer' }}
+    onClick={() => router.push(`/admin/players/${row.athlete_id}`)}
+  >
 
                 <div style={{ minWidth: 180, flex: 1 }}>
                   <div style={{ fontWeight: 800 }}>{row.player_name}</div>

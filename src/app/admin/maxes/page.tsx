@@ -27,8 +27,7 @@ const MAIN_LIFTS = [
   'Deadlift',
   'Hang Clean',
   'Front Squat',
-  'Overhead Press',
-]
+  ]
 
 export default function AdminMaxesPage() {
   const today = new Date().toISOString().split('T')[0]

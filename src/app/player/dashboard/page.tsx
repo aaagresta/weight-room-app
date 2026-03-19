@@ -638,7 +638,7 @@ async function handleSaveProfile() {
             <div>
               <h1 style={{ margin: '0 0 8px 0', fontSize: 34 }}>Player Dashboard</h1>
               {athlete && (
-                <div style={{ color: '#cbd5e1', fontSize: 30 }}>
+                <div style={{ color: '#cbd5e1', fontSize: 16 }}>
                   <p style={{ margin: 0 }}>
                     {athlete.first_name} {athlete.last_name}
                     {athlete.team_level ? ` • ${athlete.team_level}` : ''}

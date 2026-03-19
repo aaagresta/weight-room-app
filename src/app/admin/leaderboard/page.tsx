@@ -56,8 +56,7 @@ const MAIN_LIFTS = [
   'Deadlift',
   'Hang Clean',
   'Front Squat',
-  'Overhead Press',
-]
+  ]
 
 export default function Page() {
   const router = useRouter()

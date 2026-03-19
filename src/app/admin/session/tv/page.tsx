@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '../../../../lib/supabase'
 
 type Athlete = {
@@ -61,6 +62,9 @@ export default function SessionTvPage() {
   const [session, setSession] = useState<LiveRoomSession | null>(null)
   const [workout, setWorkout] = useState<DailyWorkout | null>(null)
 
+  const [minutes, setMinutes] = useState(10)
+  const [saving, setSaving] = useState(false)
+
   useEffect(() => {
     loadTvData()
 
@@ -96,6 +100,7 @@ export default function SessionTvPage() {
 
     const typedSession = sessionData as LiveRoomSession
     setSession(typedSession)
+    setMinutes(Math.min(60, Math.max(1, Math.ceil((typedSession.timer_seconds || 600) / 60))))
 
     if (!typedSession.workout_id) {
       setWorkout(null)
@@ -119,16 +124,117 @@ export default function SessionTvPage() {
     setLoading(false)
   }
 
+  async function updateSessionTimer(updates: Partial<LiveRoomSession>) {
+    if (!session) return
+
+    setSaving(true)
+
+    const { data, error } = await supabase
+      .from('live_room_sessions')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', session.id)
+      .select()
+      .single()
+
+    if (error) {
+      setMessage(`Could not update timer: ${error.message}`)
+      setSaving(false)
+      return
+    }
+
+    const typedSession = data as LiveRoomSession
+    setSession(typedSession)
+    setMinutes(Math.min(60, Math.max(1, Math.ceil((typedSession.timer_seconds || 600) / 60))))
+    setSaving(false)
+  }
+
+  async function applyTimerMinutes(value: number) {
+    if (!session) return
+    const safeValue = Math.min(60, Math.max(1, value))
+    await updateSessionTimer({
+      timer_seconds: safeValue * 60,
+      timer_running: false,
+    })
+  }
+
+  async function adjustTimerMinutes(delta: number) {
+    const nextMinutes = Math.min(60, Math.max(1, minutes + delta))
+    await applyTimerMinutes(nextMinutes)
+  }
+
+  async function adjustTimerSeconds(delta: number) {
+    if (!session) return
+    const nextSeconds = Math.min(3600, Math.max(30, (session.timer_seconds || 0) + delta))
+    await updateSessionTimer({
+      timer_seconds: nextSeconds,
+      timer_running: false,
+    })
+  }
+
+  async function startTimer() {
+    if (!session) return
+
+    const nextSeconds =
+      (session.timer_seconds || 0) <= 0 ? minutes * 60 : session.timer_seconds
+
+    await updateSessionTimer({
+      timer_seconds: nextSeconds,
+      timer_running: true,
+    })
+  }
+
+  async function pauseTimer() {
+    if (!session) return
+    await updateSessionTimer({
+      timer_running: false,
+    })
+  }
+
+  async function resetTimer() {
+    if (!session) return
+    await updateSessionTimer({
+      timer_seconds: minutes * 60,
+      timer_running: false,
+    })
+  }
+
+  async function rotatePods() {
+    if (!session) return
+
+    if (!session.pods || session.pods.length <= 1) {
+      setMessage('Create at least 2 pods to rotate.')
+      return
+    }
+
+    const rotated = session.pods.map((pod, index) => {
+      const nextRackIndex = (index + 1) % session.pods.length
+      return {
+        ...pod,
+        rackName: `Rack ${nextRackIndex + 1}`,
+      }
+    })
+
+    const sorted = [...rotated].sort((a, b) => {
+      const aNum = Number(a.rackName.replace('Rack ', ''))
+      const bNum = Number(b.rackName.replace('Rack ', ''))
+      return aNum - bNum
+    })
+
+    await updateSessionTimer({
+      pods: sorted,
+      timer_seconds: minutes * 60,
+      timer_running: false,
+    })
+  }
+
   const formattedTime = useMemo(() => {
     const totalSeconds = session?.timer_seconds ?? 0
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-  }, [session])
-
-  const podCount = session?.pods?.length || 0
-  const assignedPlayerCount = useMemo(() => {
-    return (session?.pods || []).reduce((sum, pod) => sum + (pod.players?.length || 0), 0)
+    const mins = Math.floor(totalSeconds / 60)
+    const secs = totalSeconds % 60
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
   }, [session])
 
   const workoutExercises = workout?.workout_data?.exercises || []
@@ -150,66 +256,134 @@ export default function SessionTvPage() {
   }
 
   return (
-    <div style={screenStyle}>
+    <main style={screenStyle}>
       <div style={frameStyle}>
-        <div style={topBarStyle}>
-          <div>
-            <div style={titleStyle}>Lift Session Presentation</div>
-            <div style={subTitleStyle}>
-              {session.team || 'All Teams'} • {session.session_date}
-            </div>
-          </div>
-
-          <div style={statusPillStyle(session.timer_running, session.timer_seconds)}>
-            {session.timer_seconds === 0
-              ? 'TIME IS UP'
-              : session.timer_running
-              ? 'TIMER RUNNING'
-              : 'TIMER PAUSED'}
-          </div>
+        <div style={topUtilityBarStyle}>
+          <Link href="/admin/session" style={exitTvButtonStyle}>
+            Exit TV Mode
+          </Link>
         </div>
 
         <div style={contentGridStyle}>
           <div style={leftColumnStyle}>
-            <div style={timerPanelStyle}>
-              <div style={panelLabelStyle}>Current Interval</div>
-              <div style={timerTextStyle}>{formattedTime}</div>
+            <section style={timerPanelStyle}>
+              <div style={timerBoardStyle}>
+                <div style={timerTextStyle}>{formattedTime}</div>
 
-              <div style={timerMetaRowStyle}>
-                <div style={miniMetricStyle}>
-                  <div style={miniMetricLabelStyle}>Pods</div>
-                  <div style={miniMetricValueStyle}>{podCount}</div>
-                </div>
-
-                <div style={miniMetricStyle}>
-                  <div style={miniMetricLabelStyle}>Assigned</div>
-                  <div style={miniMetricValueStyle}>{assignedPlayerCount}</div>
-                </div>
-
-                <div style={miniMetricStyle}>
-                  <div style={miniMetricLabelStyle}>Block</div>
-                  <div style={miniMetricValueStyle}>
-                    {session.current_block || 'Main Lift'}
-                  </div>
+                <div
+                  style={{
+                    color: session.timer_seconds === 0 ? '#f87171' : '#4ade80',
+                    fontWeight: 900,
+                    fontSize: 28,
+                    marginTop: 8,
+                  }}
+                >
+                  {session.timer_seconds === 0
+                    ? 'Rotate pods'
+                    : session.timer_running
+                    ? 'Running'
+                    : 'Paused'}
                 </div>
               </div>
-            </div>
 
-            <div style={workoutPanelStyle}>
-              <div style={panelHeaderRowStyle}>
-                <div>
-                  <div style={panelTitleStyle}>Assigned Workout</div>
-                  <div style={panelSubTextStyle}>
-                    {workout ? `${workout.title} • ${workout.team_level}` : 'No workout selected'}
+              <div style={compactControlsWrapStyle}>
+                <div style={presetRowStyle}>
+                  {[1, 2, 3, 5, 10, 15, 20].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => applyTimerMinutes(preset)}
+                      style={{
+                        ...presetButtonStyle,
+                        ...(minutes === preset ? presetButtonActiveStyle : {}),
+                      }}
+                      disabled={saving}
+                    >
+                      {preset}m
+                    </button>
+                  ))}
+                </div>
+
+                <div style={controlsRowStyle}>
+                  <div style={selectWrapStyle}>
+                    <label style={labelStyle}>Minutes</label>
+                    <select
+                      value={minutes}
+                      onChange={(e) => applyTimerMinutes(Number(e.target.value))}
+                      style={inputStyle}
+                      disabled={saving}
+                    >
+                      {Array.from({ length: 60 }, (_, i) => i + 1).map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute} min
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={quickRowStyle}>
+                    <button
+                      onClick={() => adjustTimerMinutes(-1)}
+                      style={smallTimerButtonStyle}
+                      disabled={saving || minutes <= 1}
+                    >
+                      -1m
+                    </button>
+                    <button
+                      onClick={() => adjustTimerMinutes(1)}
+                      style={smallTimerButtonStyle}
+                      disabled={saving || minutes >= 60}
+                    >
+                      +1m
+                    </button>
+                    <button
+                      onClick={() => adjustTimerSeconds(-30)}
+                      style={smallTimerButtonStyle}
+                      disabled={saving || (session.timer_seconds ?? 0) <= 30}
+                    >
+                      -30s
+                    </button>
+                    <button
+                      onClick={() => adjustTimerSeconds(30)}
+                      style={smallTimerButtonStyle}
+                      disabled={saving || (session.timer_seconds ?? 0) >= 3600}
+                    >
+                      +30s
+                    </button>
                   </div>
                 </div>
+
+                <div style={timerButtonRowStyle}>
+                  <button onClick={startTimer} style={startButtonStyle} disabled={saving}>
+                    Start
+                  </button>
+                  <button onClick={pauseTimer} style={pauseButtonStyle} disabled={saving}>
+                    Pause
+                  </button>
+                  <button onClick={resetTimer} style={resetButtonStyle} disabled={saving}>
+                    Reset
+                  </button>
+                  <button onClick={rotatePods} style={rotateButtonStyle} disabled={saving}>
+                    Rotate
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section style={workoutPanelStyle}>
+              <div style={workoutHeaderRowStyle}>
+                <div style={panelTitleStyle}>Assigned Workout</div>
+                {workout && (
+                  <div style={workoutTitleMetaStyle}>
+                    {workout.title} • {workout.team_level}
+                  </div>
+                )}
               </div>
 
               {!workout ? (
                 <div style={emptyStateStyle}>No workout selected for this session.</div>
               ) : (
                 <div style={exerciseListStyle}>
-                  {workoutExercises.slice(0, 8).map((exercise, index) => (
+                  {workoutExercises.map((exercise, index) => (
                     <div key={index} style={exerciseRowStyle}>
                       <div style={exerciseNameStyle}>{exercise.name}</div>
                       <div style={exercisePrescriptionStyle}>
@@ -226,20 +400,11 @@ export default function SessionTvPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </section>
           </div>
 
-          <div style={rightColumnStyle}>
-            <div style={panelHeaderRowStyle}>
-              <div>
-                <div style={panelTitleStyle}>Rack / Pod Assignments</div>
-                <div style={panelSubTextStyle}>
-                  Drag-and-drop pods from the coach screen appear here automatically
-                </div>
-              </div>
-            </div>
-
-            {podCount === 0 ? (
+          <section style={rightColumnStyle}>
+            {session.pods.length === 0 ? (
               <div style={emptyStateStyle}>No pods built yet.</div>
             ) : (
               <div style={podsGridStyle}>
@@ -252,7 +417,7 @@ export default function SessionTvPage() {
                       <div style={podEmptyStyle}>No players assigned</div>
                     ) : (
                       <div style={playerListStyle}>
-                        {pod.players.slice(0, 8).map((player) => (
+                        {pod.players.slice(0, 10).map((player) => (
                           <div key={player.id} style={playerChipStyle}>
                             {player.first_name} {player.last_name}
                           </div>
@@ -263,47 +428,23 @@ export default function SessionTvPage() {
                 ))}
               </div>
             )}
-          </div>
+          </section>
         </div>
 
         {message && <div style={footerMessageStyle}>{message}</div>}
       </div>
-    </div>
+    </main>
   )
-}
-
-function statusPillStyle(timerRunning: boolean, seconds: number): React.CSSProperties {
-  if (seconds === 0) {
-    return {
-      ...statusPillBaseStyle,
-      backgroundColor: '#991b1b',
-      border: '1px solid #ef4444',
-    }
-  }
-
-  if (timerRunning) {
-    return {
-      ...statusPillBaseStyle,
-      backgroundColor: '#166534',
-      border: '1px solid #22c55e',
-    }
-  }
-
-  return {
-    ...statusPillBaseStyle,
-    backgroundColor: '#a16207',
-    border: '1px solid #f59e0b',
-  }
 }
 
 const screenStyle: React.CSSProperties = {
   width: '100vw',
   height: '100vh',
   overflow: 'hidden',
-  background:
-    'radial-gradient(circle at top left, #1e293b 0%, #020617 45%, #000000 100%)',
+  background: '#000000',
   color: '#ffffff',
-  padding: 16,
+  padding: 0,
+  margin: 0,
   boxSizing: 'border-box',
 }
 
@@ -311,202 +452,318 @@ const frameStyle: React.CSSProperties = {
   width: '100%',
   height: '100%',
   display: 'grid',
-  gridTemplateRows: 'auto 1fr auto',
-  gap: 14,
+  gridTemplateRows: '40px 1fr auto',
+  gap: 0,
+  minWidth: 0,
+  margin: 0,
+  padding: 0,
 }
 
-const topBarStyle: React.CSSProperties = {
+const topUtilityBarStyle: React.CSSProperties = {
   display: 'flex',
-  justifyContent: 'space-between',
+  justifyContent: 'flex-end',
   alignItems: 'center',
-  gap: 16,
-  flexWrap: 'wrap',
-  padding: '6px 4px 0 4px',
+  padding: '4px 8px',
+  backgroundColor: '#000000',
+  boxSizing: 'border-box',
 }
 
-const titleStyle: React.CSSProperties = {
-  fontSize: 36,
-  fontWeight: 900,
-  lineHeight: 1,
-}
-
-const subTitleStyle: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 18,
-  color: '#cbd5e1',
-}
-
-const statusPillBaseStyle: React.CSSProperties = {
+const exitTvButtonStyle: React.CSSProperties = {
+  display: 'inline-block',
+  padding: '6px 10px',
+  borderRadius: 8,
+  border: '1px solid #374151',
+  backgroundColor: '#111827',
   color: '#ffffff',
-  padding: '12px 18px',
-  borderRadius: 999,
-  fontWeight: 900,
-  fontSize: 18,
-  letterSpacing: 0.5,
+  textDecoration: 'none',
+  fontSize: 12,
+  fontWeight: 700,
 }
 
 const contentGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: '1.05fr 1.35fr',
-  gap: 14,
+  gridTemplateColumns: '40% 60%',
+  gap: 0,
   minHeight: 0,
+  minWidth: 0,
+  width: '100%',
+  height: '100%',
 }
 
 const leftColumnStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateRows: 'auto 1fr',
-  gap: 14,
+  gridTemplateRows: '52% 48%',
+  gap: 0,
   minHeight: 0,
+  minWidth: 0,
+  height: '100%',
 }
 
 const rightColumnStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  borderRadius: 18,
-  backgroundColor: 'rgba(15, 23, 42, 0.82)',
-  padding: 16,
   minHeight: 0,
-  display: 'grid',
-  gridTemplateRows: 'auto 1fr',
+  minWidth: 0,
+  overflow: 'hidden',
+  backgroundColor: '#0b1120',
+  borderLeft: '2px solid #1f2937',
+  padding: 8,
+  boxSizing: 'border-box',
 }
 
 const timerPanelStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  borderRadius: 18,
-  backgroundColor: 'rgba(15, 23, 42, 0.88)',
-  padding: 18,
+  minWidth: 0,
+  padding: 8,
+  backgroundColor: '#020617',
+  borderBottom: '2px solid #1f2937',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
+  display: 'grid',
+  gridTemplateRows: 'auto auto',
+  gap: 8,
 }
 
 const workoutPanelStyle: React.CSSProperties = {
-  border: '1px solid #334155',
-  borderRadius: 18,
-  backgroundColor: 'rgba(15, 23, 42, 0.82)',
-  padding: 16,
   minHeight: 0,
+  minWidth: 0,
+  padding: 8,
+  backgroundColor: '#111827',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
   display: 'grid',
   gridTemplateRows: 'auto 1fr',
 }
 
-const panelLabelStyle: React.CSSProperties = {
-  color: '#94a3b8',
-  fontSize: 18,
-  marginBottom: 8,
-  fontWeight: 700,
+const timerBoardStyle: React.CSSProperties = {
+  border: '2px solid #374151',
+  borderRadius: 12,
+  padding: 14,
+  backgroundColor: '#000000',
+  textAlign: 'center',
+  minWidth: 0,
+  width: '100%',
+  boxSizing: 'border-box',
 }
 
 const timerTextStyle: React.CSSProperties = {
-  fontSize: 110,
+  fontSize: 130,
   fontWeight: 900,
-  letterSpacing: 3,
+  letterSpacing: 2,
   lineHeight: 1,
-  marginBottom: 16,
 }
 
-const timerMetaRowStyle: React.CSSProperties = {
+const compactControlsWrapStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: 10,
+  gap: 8,
 }
 
-const miniMetricStyle: React.CSSProperties = {
-  border: '1px solid #475569',
-  borderRadius: 14,
-  padding: 12,
-  backgroundColor: '#111827',
+const presetRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 5,
+  flexWrap: 'wrap',
+}
+
+const presetButtonStyle: React.CSSProperties = {
+  padding: '6px 8px',
+  borderRadius: 8,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+  cursor: 'pointer',
+  fontSize: 11,
+  fontWeight: 800,
   minWidth: 0,
 }
 
-const miniMetricLabelStyle: React.CSSProperties = {
-  color: '#94a3b8',
-  fontSize: 13,
-  marginBottom: 6,
-  textTransform: 'uppercase',
-  letterSpacing: 0.5,
+const presetButtonActiveStyle: React.CSSProperties = {
+  border: '1px solid #1d4ed8',
+  backgroundColor: '#1d4ed8',
 }
 
-const miniMetricValueStyle: React.CSSProperties = {
-  color: '#ffffff',
-  fontSize: 22,
-  fontWeight: 800,
-  wordBreak: 'break-word',
+const controlsRowStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '130px 1fr',
+  gap: 6,
+  alignItems: 'end',
 }
 
-const panelHeaderRowStyle: React.CSSProperties = {
+const selectWrapStyle: React.CSSProperties = {
+  minWidth: 0,
+}
+
+const quickRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 8,
+  flexWrap: 'wrap',
+  alignItems: 'end',
+}
+
+const timerButtonRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  flexWrap: 'wrap',
+}
+
+const workoutHeaderRowStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
-  alignItems: 'flex-start',
-  gap: 12,
-  marginBottom: 12,
+  alignItems: 'baseline',
+  gap: 8,
+  marginBottom: 8,
+  flexWrap: 'wrap',
 }
 
 const panelTitleStyle: React.CSSProperties = {
-  fontSize: 26,
+  fontSize: 24,
+  fontWeight: 900,
+}
+
+const workoutTitleMetaStyle: React.CSSProperties = {
+  color: '#93c5fd',
+  fontSize: 11,
+  fontWeight: 700,
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block',
+  marginBottom: 4,
+  color: '#d4d4d8',
+  fontSize: 12,
+  fontWeight: 700,
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: 10,
+  borderRadius: 10,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+  fontSize: 14,
+  fontWeight: 700,
+}
+
+const startButtonStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid #166534',
+  backgroundColor: '#166534',
+  color: '#ffffff',
+  cursor: 'pointer',
+  fontWeight: 800,
+  fontSize: 12,
+}
+
+const pauseButtonStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid #a16207',
+  backgroundColor: '#a16207',
+  color: '#ffffff',
+  cursor: 'pointer',
+  fontWeight: 800,
+  fontSize: 12,
+}
+
+const resetButtonStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+  cursor: 'pointer',
+  fontWeight: 800,
+  fontSize: 12,
+}
+
+const rotateButtonStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 8,
+  border: '1px solid #991b1b',
+  backgroundColor: '#991b1b',
+  color: '#ffffff',
+  cursor: 'pointer',
+  fontWeight: 800,
+  fontSize: 12,
+}
+
+const smallTimerButtonStyle: React.CSSProperties = {
+  padding: '8px 10px',
+  borderRadius: 8,
+  border: '1px solid #52525b',
+  backgroundColor: '#27272a',
+  color: '#ffffff',
+  cursor: 'pointer',
+  fontSize: 11,
   fontWeight: 800,
 }
 
-const panelSubTextStyle: React.CSSProperties = {
-  marginTop: 4,
-  color: '#94a3b8',
-  fontSize: 15,
-}
 
 const exerciseListStyle: React.CSSProperties = {
   display: 'grid',
-  gap: 8,
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: 6,
   overflow: 'hidden',
+  alignContent: 'start',
 }
 
 const exerciseRowStyle: React.CSSProperties = {
   border: '1px solid #475569',
-  borderRadius: 12,
-  padding: '10px 12px',
-  backgroundColor: '#111827',
+  borderRadius: 10,
+  padding: '6px 8px',
+  backgroundColor: '#0b1120',
+  minWidth: 0,
 }
 
 const exerciseNameStyle: React.CSSProperties = {
-  fontSize: 18,
+  fontSize: 14,
   fontWeight: 800,
-  marginBottom: 4,
+  marginBottom: 3,
+  lineHeight: 1.1,
 }
 
 const exercisePrescriptionStyle: React.CSSProperties = {
   color: '#cbd5e1',
-  fontSize: 15,
+  fontSize: 11,
+  fontWeight: 700,
+  lineHeight: 1.15,
 }
+
 
 const podsGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: 12,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+  gap: 8,
   alignContent: 'start',
   overflow: 'hidden',
+  minWidth: 0,
 }
 
 const podCardStyle: React.CSSProperties = {
   border: '1px solid #475569',
   borderRadius: 14,
-  padding: 14,
+  padding: 10,
   backgroundColor: '#111827',
-  minHeight: 140,
+  minHeight: 110,
   display: 'grid',
   gridTemplateRows: 'auto auto 1fr',
+  minWidth: 0,
 }
 
 const rackNameStyle: React.CSSProperties = {
-  fontSize: 24,
+  fontSize: 22,
   fontWeight: 900,
   marginBottom: 2,
 }
 
 const podNameStyle: React.CSSProperties = {
   color: '#93c5fd',
-  fontSize: 16,
-  fontWeight: 700,
-  marginBottom: 10,
+  fontSize: 15,
+  fontWeight: 800,
+  marginBottom: 8,
 }
 
 const playerListStyle: React.CSSProperties = {
   display: 'grid',
-  gap: 8,
+  gap: 6,
   alignContent: 'start',
 }
 
@@ -515,14 +772,14 @@ const playerChipStyle: React.CSSProperties = {
   padding: '8px 10px',
   backgroundColor: '#1f2937',
   border: '1px solid #374151',
-  fontSize: 15,
+  fontSize: 14,
   fontWeight: 700,
   lineHeight: 1.2,
 }
 
 const podEmptyStyle: React.CSSProperties = {
   color: '#94a3b8',
-  fontSize: 15,
+  fontSize: 14,
 }
 
 const emptyStateStyle: React.CSSProperties = {
@@ -536,6 +793,8 @@ const emptyStateStyle: React.CSSProperties = {
 const footerMessageStyle: React.CSSProperties = {
   color: '#fca5a5',
   fontSize: 14,
+  padding: '4px 8px',
+  backgroundColor: '#000000',
 }
 
 const centerMessageStyle: React.CSSProperties = {

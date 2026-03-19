@@ -90,7 +90,7 @@ export default function AccountApprovalsPage() {
 
     const requestedRole = getRequestedRole(profile)
 
-    if (requestedRole === 'coach' || requestedRole === 'admin') {
+   if (requestedRole === 'coach' || requestedRole === 'admin') {
   const { error } = await supabase
     .from('profiles')
     .update({
@@ -98,18 +98,32 @@ export default function AccountApprovalsPage() {
       requested_role: 'coach',
       approval_status: 'approved',
     })
-        .eq('id', profile.id)
+    .eq('id', profile.id)
 
-      if (error) {
-        setMessage(`Error approving coach: ${error.message}`)
-        return
-      }
+  if (error) {
+    setMessage(`Error approving coach: ${error.message}`)
+    return
+  }
 
-      setMessage('Coach approved.')
-      await loadData()
-      return
-    }
+  const { error: coachError } = await supabase
+    .from('coaches')
+    .upsert(
+      {
+        profile_id: profile.id,
+        full_name: profile.full_name || 'Unnamed Coach',
+      },
+      { onConflict: 'profile_id' }
+    )
 
+  if (coachError) {
+    setMessage(`Coach approved, but coach profile creation failed: ${coachError.message}`)
+    return
+  }
+
+  setMessage('Coach approved.')
+  await loadData()
+  return
+}
     if (requestedRole === 'player' || requestedRole === 'athlete') {
       const chosenAthleteId = selectedAthleteMap[profile.id]
 

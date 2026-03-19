@@ -123,9 +123,15 @@ export default function AdminPage() {
 </a> 
 
         <a href="/admin/assignments" style={cardStyle}>
-  <h2 style={cardTitleStyle}>Workout Assignments</h2>
-  <p style={cardTextStyle}>Choose which saved workouts are visible to teams or players.</p>
-</a>
+          <h2 style={cardTitleStyle}>Workout Assignments</h2>
+          <p style={cardTextStyle}>Choose which saved workouts are visible to teams or players.</p>
+        </a>
+    
+
+        <a href="/admin/coaches" style={cardStyle}>
+          <h2 style={cardTitleStyle}>Coaches</h2>
+          <p style={cardTextStyle}>View Valley Christian Coaching Staff.</p>
+        </a>
 
         <a href="/admin/players" style={cardStyle}>
           <h2 style={cardTitleStyle}>Players</h2>

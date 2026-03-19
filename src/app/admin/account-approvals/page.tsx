@@ -29,7 +29,6 @@ export default function AccountApprovalsPage() {
   const [athletes, setAthletes] = useState<Athlete[]>([])
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
-
   const [selectedAthleteMap, setSelectedAthleteMap] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -90,40 +89,41 @@ export default function AccountApprovalsPage() {
 
     const requestedRole = getRequestedRole(profile)
 
-   if (requestedRole === 'coach' || requestedRole === 'admin') {
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      role: 'admin',
-      requested_role: 'coach',
-      approval_status: 'approved',
-    })
-    .eq('id', profile.id)
+    if (requestedRole === 'coach' || requestedRole === 'admin') {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          role: 'admin',
+          requested_role: 'coach',
+          approval_status: 'approved',
+        })
+        .eq('id', profile.id)
 
-  if (error) {
-    setMessage(`Error approving coach: ${error.message}`)
-    return
-  }
+      if (error) {
+        setMessage(`Error approving coach: ${error.message}`)
+        return
+      }
 
-  const { error: coachError } = await supabase
-    .from('coaches')
-    .upsert(
-      {
-        profile_id: profile.id,
-        full_name: profile.full_name || 'Unnamed Coach',
-      },
-      { onConflict: 'profile_id' }
-    )
+      const { error: coachError } = await supabase
+        .from('coaches')
+        .upsert(
+          {
+            profile_id: profile.id,
+            full_name: profile.full_name || 'Unnamed Coach',
+          },
+          { onConflict: 'profile_id' }
+        )
 
-  if (coachError) {
-    setMessage(`Coach approved, but coach profile creation failed: ${coachError.message}`)
-    return
-  }
+      if (coachError) {
+        setMessage(`Coach approved, but coach profile creation failed: ${coachError.message}`)
+        return
+      }
 
-  setMessage('Coach approved.')
-  await loadData()
-  return
-}
+      setMessage('Coach approved.')
+      await loadData()
+      return
+    }
+
     if (requestedRole === 'player' || requestedRole === 'athlete') {
       const chosenAthleteId = selectedAthleteMap[profile.id]
 
@@ -227,14 +227,6 @@ export default function AccountApprovalsPage() {
     [pendingProfiles]
   )
 
-  const unknownProfiles = useMemo(
-    () => pendingProfiles.filter((profile) => {
-      const requestedRole = getRequestedRole(profile)
-      return !['coach', 'admin', 'player', 'athlete'].includes(requestedRole)
-    }),
-    [pendingProfiles]
-  )
-
   return (
     <div style={pageStyle}>
       <div style={headerStyle}>
@@ -283,8 +275,7 @@ export default function AccountApprovalsPage() {
                         {profile.email || 'No email'}
                       </div>
                       <div>
-                        Requested Role:{' '}
-                        <strong>{getRequestedRole(profile) || 'unknown'}</strong>
+                        Requested Role: <strong>{getRequestedRole(profile) || 'unknown'}</strong>
                       </div>
                     </div>
 
@@ -320,8 +311,7 @@ export default function AccountApprovalsPage() {
                         {profile.email || 'No email'}
                       </div>
                       <div>
-                        Requested Role:{' '}
-                        <strong>{getRequestedRole(profile) || 'unknown'}</strong>
+                        Requested Role: <strong>{getRequestedRole(profile) || 'unknown'}</strong>
                       </div>
 
                       <div style={{ marginTop: 12, maxWidth: 320 }}>
@@ -361,37 +351,6 @@ export default function AccountApprovalsPage() {
               </div>
             )}
           </div>
-
-          {unknownProfiles.length > 0 && (
-            <div style={panelStyle}>
-              <h2 style={{ marginTop: 0 }}>Unknown Requests</h2>
-
-              <div style={{ display: 'grid', gap: 12 }}>
-                {unknownProfiles.map((profile) => (
-                  <div key={profile.id} style={cardStyle}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 18, fontWeight: 700 }}>
-                        {profile.full_name || 'Unnamed User'}
-                      </div>
-                      <div style={{ color: '#a1a1aa', marginBottom: 8 }}>
-                        {profile.email || 'No email'}
-                      </div>
-                      <div>
-                        Requested Role:{' '}
-                        <strong>{getRequestedRole(profile) || 'unknown'}</strong>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                      <button onClick={() => rejectProfile(profile.id)} style={rejectButtonStyle}>
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import { supabase } from '../../../lib/supabase'
 
 type CoachRow = {
@@ -39,6 +40,7 @@ export default function CoachesPage() {
   const [message, setMessage] = useState('')
   const [search, setSearch] = useState('')
   const [coaches, setCoaches] = useState<CoachWithProfile[]>([])
+  const [coachImageUrls, setCoachImageUrls] = useState<Record<string, string>>({})
 
   useEffect(() => {
     loadCoaches()
@@ -113,16 +115,38 @@ export default function CoachesPage() {
       return {
         id: coach?.id || profile.id,
         profile_id: profile.id,
-        full_name: coach?.full_name || profile.full_name || 'Unnamed Coach',
+        full_name:
+          (coach?.full_name && coach.full_name.trim()) ||
+          (profile.full_name && profile.full_name.trim()) ||
+          'Unnamed Coach',
         age: coach?.age ?? null,
         coaching_position: coach?.coaching_position ?? null,
         profile_image_path: coach?.profile_image_path ?? null,
-        email: profile.email || null,
+        email: (profile.email && profile.email.trim()) || null,
       }
     })
 
     setCoaches(merged)
+    await loadCoachImages(merged)
     setLoading(false)
+  }
+
+  async function loadCoachImages(coachRows: CoachWithProfile[]) {
+    const nextUrls: Record<string, string> = {}
+
+    for (const coach of coachRows) {
+      if (!coach.profile_image_path) continue
+
+      const { data, error } = await supabase.storage
+        .from('coach-photos')
+        .createSignedUrl(coach.profile_image_path, 60 * 60)
+
+      if (!error && data?.signedUrl) {
+        nextUrls[coach.profile_id] = data.signedUrl
+      }
+    }
+
+    setCoachImageUrls(nextUrls)
   }
 
   const filteredCoaches = useMemo(() => {
@@ -179,37 +203,54 @@ export default function CoachesPage() {
 
       {!loading && filteredCoaches.length > 0 && (
         <div style={gridStyle}>
-          {filteredCoaches.map((coach) => (
-            <div
-              key={coach.profile_id}
-              style={coachCardStyle}
-              onClick={() => router.push(`/admin/coaches/${coach.profile_id}`)}
-            >
-              <div style={avatarStyle}>
-                {(coach.full_name || 'C').charAt(0).toUpperCase()}
+          {filteredCoaches.map((coach) => {
+            const imageUrl = coachImageUrls[coach.profile_id]
+
+            return (
+              <div
+                key={coach.profile_id}
+                style={coachCardStyle}
+                onClick={() => router.push(`/admin/coaches/${coach.profile_id}`)}
+              >
+                <div style={avatarWrapStyle}>
+                  {imageUrl ? (
+                    <Image
+                      src={imageUrl}
+                      alt="Coach profile photo"
+                      width={72}
+                      height={72}
+                      style={{ borderRadius: 999, objectFit: 'cover' }}
+                      unoptimized
+                    />
+                  ) : (
+                    <div style={avatarStyle}>
+                      {(coach.full_name || 'C').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>
+                    {coach.full_name || 'Unnamed Coach'}
+                  </div>
+
+                  <div style={smallTextStyle}>
+                    {coach.email || 'No email'}
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <div style={metaLabelStyle}>Age</div>
+                    <div>{coach.age ?? '—'}</div>
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <div style={metaLabelStyle}>Position</div>
+                    <div>{coach.coaching_position || '—'}</div>
+                  </div>
+                </div>
               </div>
-
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>
-                  {coach.full_name || 'Unnamed Coach'}
-                </div>
-
-                <div style={smallTextStyle}>
-                  {coach.email || 'No email'}
-                </div>
-
-                <div style={{ marginTop: 10 }}>
-                  <div style={metaLabelStyle}>Age</div>
-                  <div>{coach.age ?? '—'}</div>
-                </div>
-
-                <div style={{ marginTop: 10 }}>
-                  <div style={metaLabelStyle}>Position</div>
-                  <div>{coach.coaching_position || '—'}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -290,6 +331,15 @@ const coachCardStyle: React.CSSProperties = {
   gap: 14,
   alignItems: 'start',
   cursor: 'pointer',
+}
+
+const avatarWrapStyle: React.CSSProperties = {
+  width: 72,
+  height: 72,
+  borderRadius: 999,
+  overflow: 'hidden',
+  backgroundColor: '#1e293b',
+  border: '1px solid #475569',
 }
 
 const avatarStyle: React.CSSProperties = {

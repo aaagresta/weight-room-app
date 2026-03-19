@@ -17,6 +17,7 @@ type Coach = {
 type Profile = {
   id: string
   email: string | null
+  full_name: string | null
   role: string | null
   approval_status: string | null
 }
@@ -24,7 +25,7 @@ type Profile = {
 export default function CoachDetailPage() {
   const router = useRouter()
   const params = useParams<{ coachId: string }>()
-  const coachId = params.coachId
+  const coachProfileId = params.coachId
 
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
@@ -43,7 +44,7 @@ export default function CoachDetailPage() {
 
   useEffect(() => {
     loadCoach()
-  }, [coachId])
+  }, [coachProfileId])
 
   async function loadCoach() {
     setLoading(true)
@@ -75,36 +76,10 @@ export default function CoachDetailPage() {
       return
     }
 
-    const { data: coachData, error: coachError } = await supabase
-      .from('coaches')
-      .select('id, profile_id, full_name, age, coaching_position, profile_image_path')
-      .eq('id', coachId)
-      .maybeSingle()
-
-    if (coachError) {
-      setMessage(`Could not load coach: ${coachError.message}`)
-      setLoading(false)
-      return
-    }
-
-    if (!coachData) {
-      setMessage('Coach profile not found.')
-      setLoading(false)
-      return
-    }
-
-    const typedCoach = coachData as Coach
-    setCoach(typedCoach)
-    setEditFullName(typedCoach.full_name || '')
-    setEditAge(
-      typedCoach.age !== null && typedCoach.age !== undefined ? String(typedCoach.age) : ''
-    )
-    setEditCoachingPosition(typedCoach.coaching_position || '')
-
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
-      .select('id, email, role, approval_status')
-      .eq('id', typedCoach.profile_id)
+      .select('id, email, full_name, role, approval_status')
+      .eq('id', coachProfileId)
       .maybeSingle()
 
     if (profileError) {
@@ -113,7 +88,58 @@ export default function CoachDetailPage() {
       return
     }
 
-    setProfile((profileData as Profile) || null)
+    if (!profileData) {
+      setMessage('Coach profile not found.')
+      setLoading(false)
+      return
+    }
+
+    const typedProfile = profileData as Profile
+    setProfile(typedProfile)
+
+    const { data: coachData, error: coachError } = await supabase
+      .from('coaches')
+      .select('id, profile_id, full_name, age, coaching_position, profile_image_path')
+      .eq('profile_id', coachProfileId)
+      .maybeSingle()
+
+    if (coachError) {
+      setMessage(`Could not load coach record: ${coachError.message}`)
+      setLoading(false)
+      return
+    }
+
+    let typedCoach: Coach | null = null
+
+    if (!coachData) {
+      const { data: insertedCoach, error: insertError } = await supabase
+        .from('coaches')
+        .insert([
+          {
+            profile_id: typedProfile.id,
+            full_name: typedProfile.full_name || 'Unnamed Coach',
+          },
+        ])
+        .select()
+        .single()
+
+      if (insertError) {
+        setMessage(`Coach profile exists, but coach record could not be created: ${insertError.message}`)
+        setLoading(false)
+        return
+      }
+
+      typedCoach = insertedCoach as Coach
+    } else {
+      typedCoach = coachData as Coach
+    }
+
+    setCoach(typedCoach)
+    setEditFullName(typedCoach.full_name || typedProfile.full_name || '')
+    setEditAge(
+      typedCoach.age !== null && typedCoach.age !== undefined ? String(typedCoach.age) : ''
+    )
+    setEditCoachingPosition(typedCoach.coaching_position || '')
 
     await loadProfilePhoto(typedCoach.profile_image_path)
 
@@ -139,7 +165,7 @@ export default function CoachDetailPage() {
   }
 
   async function handleSaveCoachProfile() {
-    if (!coach) return
+    if (!coach || !profile) return
 
     setSaving(true)
     setMessage('')
@@ -152,17 +178,33 @@ export default function CoachDetailPage() {
       return
     }
 
-    const { error } = await supabase
+    const trimmedFullName = editFullName.trim() || null
+    const trimmedPosition = editCoachingPosition.trim() || null
+
+    const { error: coachError } = await supabase
       .from('coaches')
       .update({
-        full_name: editFullName.trim() || null,
+        full_name: trimmedFullName,
         age: parsedAge,
-        coaching_position: editCoachingPosition.trim() || null,
+        coaching_position: trimmedPosition,
       })
       .eq('id', coach.id)
 
-    if (error) {
-      setMessage(`Could not save coach profile: ${error.message}`)
+    if (coachError) {
+      setMessage(`Could not save coach profile: ${coachError.message}`)
+      setSaving(false)
+      return
+    }
+
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        full_name: trimmedFullName,
+      })
+      .eq('id', profile.id)
+
+    if (profileError) {
+      setMessage(`Coach saved, but profile name update failed: ${profileError.message}`)
       setSaving(false)
       return
     }
@@ -181,7 +223,7 @@ export default function CoachDetailPage() {
     setMessage('')
 
     const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const filePath = `${coach.id}/profile.${fileExt}`
+    const filePath = `${coach.profile_id}/profile.${fileExt}`
 
     const { error: uploadError } = await supabase.storage
       .from('coach-photos')
@@ -213,10 +255,12 @@ export default function CoachDetailPage() {
   }
 
   function resetEditFields() {
-    if (!coach) return
-    setEditFullName(coach.full_name || '')
-    setEditAge(coach.age !== null && coach.age !== undefined ? String(coach.age) : '')
-    setEditCoachingPosition(coach.coaching_position || '')
+    if (!coach && !profile) return
+    setEditFullName(coach?.full_name || profile?.full_name || '')
+    setEditAge(
+      coach?.age !== null && coach?.age !== undefined ? String(coach.age) : ''
+    )
+    setEditCoachingPosition(coach?.coaching_position || '')
   }
 
   if (loading) {
@@ -244,7 +288,7 @@ export default function CoachDetailPage() {
                 />
               ) : (
                 <div style={photoFallbackStyle}>
-                  {(coach?.full_name || 'C').charAt(0).toUpperCase()}
+                  {(coach?.full_name || profile?.full_name || 'C').charAt(0).toUpperCase()}
                 </div>
               )}
             </div>
@@ -252,7 +296,7 @@ export default function CoachDetailPage() {
             <div>
               <h1 style={{ margin: '0 0 8px 0', fontSize: 34 }}>Coach Profile</h1>
               <p style={{ color: '#cbd5e1', margin: 0, fontSize: 16 }}>
-                {coach?.full_name || 'Unnamed Coach'}
+                {coach?.full_name || profile?.full_name || 'Unnamed Coach'}
               </p>
             </div>
           </div>
@@ -275,19 +319,12 @@ export default function CoachDetailPage() {
           <h2 style={{ margin: 0 }}>Coach Info</h2>
 
           {!editing ? (
-            <button
-              onClick={() => setEditing(true)}
-              style={smallEditButtonStyle}
-            >
+            <button onClick={() => setEditing(true)} style={smallEditButtonStyle}>
               Edit Coach Profile
             </button>
           ) : (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                onClick={handleSaveCoachProfile}
-                disabled={saving}
-                style={saveButtonStyle}
-              >
+              <button onClick={handleSaveCoachProfile} disabled={saving} style={saveButtonStyle}>
                 {saving ? 'Saving...' : 'Save'}
               </button>
 
@@ -306,12 +343,8 @@ export default function CoachDetailPage() {
 
         {!editing ? (
           <div style={infoGridStyle}>
-            <InfoCard label="Name" value={coach?.full_name || '—'} />
-            <InfoCard label="Age" value={coach?.age?.toString() || '—'} />
             <InfoCard label="Coaching Position" value={coach?.coaching_position || '—'} />
             <InfoCard label="Email" value={profile?.email || '—'} />
-            <InfoCard label="Role" value={profile?.role || '—'} />
-            <InfoCard label="Approval Status" value={profile?.approval_status || '—'} />
           </div>
         ) : (
           <div

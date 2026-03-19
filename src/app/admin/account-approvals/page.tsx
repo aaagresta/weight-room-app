@@ -20,6 +20,10 @@ type Athlete = {
   team_level: string | null
 }
 
+function getRequestedRole(profile: ProfileRow) {
+  return (profile.requested_role || profile.role || '').toLowerCase()
+}
+
 export default function AccountApprovalsPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([])
   const [athletes, setAthletes] = useState<Athlete[]>([])
@@ -40,7 +44,8 @@ export default function AccountApprovalsPage() {
       supabase
         .from('profiles')
         .select('id, email, full_name, role, requested_role, approval_status, athlete_id')
-        .eq('approval_status', 'pending'),
+        .eq('approval_status', 'pending')
+        .order('id', { ascending: true }),
 
       supabase
         .from('athletes')
@@ -83,13 +88,16 @@ export default function AccountApprovalsPage() {
   async function approveProfile(profile: ProfileRow) {
     setMessage('')
 
-    if (profile.requested_role === 'coach') {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          role: 'coach',
-          approval_status: 'approved',
-        })
+    const requestedRole = getRequestedRole(profile)
+
+    if (requestedRole === 'coach' || requestedRole === 'admin') {
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      role: 'admin',
+      requested_role: 'coach',
+      approval_status: 'approved',
+    })
         .eq('id', profile.id)
 
       if (error) {
@@ -102,7 +110,7 @@ export default function AccountApprovalsPage() {
       return
     }
 
-    if (profile.requested_role === 'player') {
+    if (requestedRole === 'player' || requestedRole === 'athlete') {
       const chosenAthleteId = selectedAthleteMap[profile.id]
 
       if (chosenAthleteId) {
@@ -110,6 +118,7 @@ export default function AccountApprovalsPage() {
           .from('profiles')
           .update({
             role: 'player',
+            requested_role: 'player',
             approval_status: 'approved',
             athlete_id: chosenAthleteId,
           })
@@ -126,21 +135,21 @@ export default function AccountApprovalsPage() {
       }
 
       const nameParts = splitName(profile.full_name)
+      const DEFAULT_ORG_ID = '11111111-1111-1111-1111-111111111111'
 
-     const DEFAULT_ORG_ID = '11111111-1111-1111-1111-111111111111'
+      const { data: newAthlete, error: athleteError } = await supabase
+        .from('athletes')
+        .insert([
+          {
+            first_name: nameParts.firstName,
+            last_name: nameParts.lastName,
+            team_level: 'Varsity',
+            org_id: DEFAULT_ORG_ID,
+          },
+        ])
+        .select()
+        .single()
 
-    const { data: newAthlete, error: athleteError } = await supabase
-  .from('athletes')
-  .insert([
-    {
-      first_name: nameParts.firstName,
-      last_name: nameParts.lastName,
-      team_level: 'Varsity',
-      org_id: DEFAULT_ORG_ID,
-    },
-  ])
-  .select()
-  .single()
       if (athleteError || !newAthlete) {
         setMessage(`Error creating athlete: ${athleteError?.message || 'Unknown error'}`)
         return
@@ -150,6 +159,7 @@ export default function AccountApprovalsPage() {
         .from('profiles')
         .update({
           role: 'player',
+          requested_role: 'player',
           approval_status: 'approved',
           athlete_id: newAthlete.id,
         })
@@ -165,7 +175,7 @@ export default function AccountApprovalsPage() {
       return
     }
 
-    setMessage('Unknown requested role.')
+    setMessage(`Unknown requested role for ${profile.full_name || profile.email || 'user'}.`)
   }
 
   async function rejectProfile(profileId: string) {
@@ -186,6 +196,30 @@ export default function AccountApprovalsPage() {
   }
 
   const pendingProfiles = useMemo(() => profiles, [profiles])
+
+  const pendingCoachProfiles = useMemo(
+    () => pendingProfiles.filter((profile) => {
+      const requestedRole = getRequestedRole(profile)
+      return requestedRole === 'coach' || requestedRole === 'admin'
+    }),
+    [pendingProfiles]
+  )
+
+  const pendingPlayerProfiles = useMemo(
+    () => pendingProfiles.filter((profile) => {
+      const requestedRole = getRequestedRole(profile)
+      return requestedRole === 'player' || requestedRole === 'athlete'
+    }),
+    [pendingProfiles]
+  )
+
+  const unknownProfiles = useMemo(
+    () => pendingProfiles.filter((profile) => {
+      const requestedRole = getRequestedRole(profile)
+      return !['coach', 'admin', 'player', 'athlete'].includes(requestedRole)
+    }),
+    [pendingProfiles]
+  )
 
   return (
     <div style={pageStyle}>
@@ -217,54 +251,133 @@ export default function AccountApprovalsPage() {
       )}
 
       {!loading && pendingProfiles.length > 0 && (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {pendingProfiles.map((profile) => (
-            <div key={profile.id} style={cardStyle}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>
-                  {profile.full_name || 'Unnamed User'}
-                </div>
-                <div style={{ color: '#a1a1aa', marginBottom: 8 }}>
-                  {profile.email || 'No email'}
-                </div>
-                <div>Requested Role: <strong>{profile.requested_role || 'unknown'}</strong></div>
+        <div style={{ display: 'grid', gap: 20 }}>
+          <div style={panelStyle}>
+            <h2 style={{ marginTop: 0 }}>Coach Requests</h2>
 
-                {profile.requested_role === 'player' && (
-                  <div style={{ marginTop: 12, maxWidth: 320 }}>
-                    <label style={labelStyle}>Link to existing athlete (optional)</label>
-                    <select
-                      value={selectedAthleteMap[profile.id] || ''}
-                      onChange={(e) =>
-                        setSelectedAthleteMap((prev) => ({
-                          ...prev,
-                          [profile.id]: e.target.value,
-                        }))
-                      }
-                      style={inputStyle}
-                    >
-                      <option value="">Create new athlete automatically</option>
-                      {athletes.map((athlete) => (
-                        <option key={athlete.id} value={athlete.id}>
-                          {athlete.first_name} {athlete.last_name}
-                          {athlete.team_level ? ` (${athlete.team_level})` : ''}
-                        </option>
-                      ))}
-                    </select>
+            {pendingCoachProfiles.length === 0 ? (
+              <p style={{ color: '#d4d4d8', margin: 0 }}>No pending coach requests.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {pendingCoachProfiles.map((profile) => (
+                  <div key={profile.id} style={cardStyle}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>
+                        {profile.full_name || 'Unnamed User'}
+                      </div>
+                      <div style={{ color: '#a1a1aa', marginBottom: 8 }}>
+                        {profile.email || 'No email'}
+                      </div>
+                      <div>
+                        Requested Role:{' '}
+                        <strong>{getRequestedRole(profile) || 'unknown'}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button onClick={() => approveProfile(profile)} style={approveButtonStyle}>
+                        Approve
+                      </button>
+
+                      <button onClick={() => rejectProfile(profile.id)} style={rejectButtonStyle}>
+                        Reject
+                      </button>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
+            )}
+          </div>
 
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button onClick={() => approveProfile(profile)} style={approveButtonStyle}>
-                  Approve
-                </button>
+          <div style={panelStyle}>
+            <h2 style={{ marginTop: 0 }}>Player Requests</h2>
 
-                <button onClick={() => rejectProfile(profile.id)} style={rejectButtonStyle}>
-                  Reject
-                </button>
+            {pendingPlayerProfiles.length === 0 ? (
+              <p style={{ color: '#d4d4d8', margin: 0 }}>No pending player requests.</p>
+            ) : (
+              <div style={{ display: 'grid', gap: 12 }}>
+                {pendingPlayerProfiles.map((profile) => (
+                  <div key={profile.id} style={cardStyle}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>
+                        {profile.full_name || 'Unnamed User'}
+                      </div>
+                      <div style={{ color: '#a1a1aa', marginBottom: 8 }}>
+                        {profile.email || 'No email'}
+                      </div>
+                      <div>
+                        Requested Role:{' '}
+                        <strong>{getRequestedRole(profile) || 'unknown'}</strong>
+                      </div>
+
+                      <div style={{ marginTop: 12, maxWidth: 320 }}>
+                        <label style={labelStyle}>Link to existing athlete (optional)</label>
+                        <select
+                          value={selectedAthleteMap[profile.id] || ''}
+                          onChange={(e) =>
+                            setSelectedAthleteMap((prev) => ({
+                              ...prev,
+                              [profile.id]: e.target.value,
+                            }))
+                          }
+                          style={inputStyle}
+                        >
+                          <option value="">Create new athlete automatically</option>
+                          {athletes.map((athlete) => (
+                            <option key={athlete.id} value={athlete.id}>
+                              {athlete.first_name} {athlete.last_name}
+                              {athlete.team_level ? ` (${athlete.team_level})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button onClick={() => approveProfile(profile)} style={approveButtonStyle}>
+                        Approve
+                      </button>
+
+                      <button onClick={() => rejectProfile(profile.id)} style={rejectButtonStyle}>
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {unknownProfiles.length > 0 && (
+            <div style={panelStyle}>
+              <h2 style={{ marginTop: 0 }}>Unknown Requests</h2>
+
+              <div style={{ display: 'grid', gap: 12 }}>
+                {unknownProfiles.map((profile) => (
+                  <div key={profile.id} style={cardStyle}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 18, fontWeight: 700 }}>
+                        {profile.full_name || 'Unnamed User'}
+                      </div>
+                      <div style={{ color: '#a1a1aa', marginBottom: 8 }}>
+                        {profile.email || 'No email'}
+                      </div>
+                      <div>
+                        Requested Role:{' '}
+                        <strong>{getRequestedRole(profile) || 'unknown'}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      <button onClick={() => rejectProfile(profile.id)} style={rejectButtonStyle}>
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          )}
         </div>
       )}
     </div>

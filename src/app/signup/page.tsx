@@ -22,9 +22,13 @@ export default function SignupPage() {
       return
     }
 
+    const cleanName = fullName.trim()
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanPassword = password.trim()
+
     const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password: password.trim(),
+      email: cleanEmail,
+      password: cleanPassword,
     })
 
     if (error) {
@@ -39,13 +43,15 @@ export default function SignupPage() {
       return
     }
 
+    const safeRoleForProfile = role === 'coach' ? 'admin' : 'player'
+
     const { error: profileError } = await supabase.from('profiles').upsert([
       {
         id: data.user.id,
-        email: email.trim(),
-        full_name: fullName.trim(),
+        email: cleanEmail,
+        full_name: cleanName,
         requested_role: role,
-        role: role,
+        role: safeRoleForProfile,
         approval_status: 'pending',
         athlete_id: null,
       },
@@ -128,7 +134,17 @@ export default function SignupPage() {
         </div>
 
         {message && (
-          <p style={{ marginTop: 16, color: message.includes('failed') || message.includes('required') ? '#f87171' : '#4ade80' }}>
+          <p
+            style={{
+              marginTop: 16,
+              color:
+                message.includes('failed') ||
+                message.includes('required') ||
+                message.includes('Account created, but')
+                  ? '#f87171'
+                  : '#4ade80',
+            }}
+          >
             {message}
           </p>
         )}

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../../../../lib/supabase'
 
@@ -65,18 +65,34 @@ export default function SessionTvPage() {
   const [minutes, setMinutes] = useState(10)
   const [saving, setSaving] = useState(false)
 
+  const [displaySeconds, setDisplaySeconds] = useState(600)
+  const [displayRunning, setDisplayRunning] = useState(false)
+
+  const hasHydratedRef = useRef(false)
+
   useEffect(() => {
     loadTvData()
-
-    const interval = window.setInterval(() => {
-      loadTvData(false)
-    }, 2000)
-
-    return () => window.clearInterval(interval)
   }, [])
 
-  async function loadTvData(showLoading = true) {
-    if (showLoading) setLoading(true)
+  useEffect(() => {
+    if (!displayRunning) return
+
+    const interval = window.setInterval(() => {
+      setDisplaySeconds((prev) => {
+        if (prev <= 1) {
+          setDisplayRunning(false)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => window.clearInterval(interval)
+  }, [displayRunning])
+
+  async function loadTvData() {
+    setLoading(true)
+    setMessage('')
 
     const { data: sessionData, error: sessionError } = await supabase
       .from('live_room_sessions')
@@ -100,7 +116,20 @@ export default function SessionTvPage() {
 
     const typedSession = sessionData as LiveRoomSession
     setSession(typedSession)
-    setMinutes(Math.min(60, Math.max(1, Math.ceil((typedSession.timer_seconds || 600) / 60))))
+
+    const safeSeconds =
+      typedSession.timer_seconds && typedSession.timer_seconds > 0
+        ? typedSession.timer_seconds
+        : 600
+
+    const safeMinutes = Math.min(60, Math.max(1, Math.ceil(safeSeconds / 60)))
+    setMinutes(safeMinutes)
+
+    if (!hasHydratedRef.current) {
+      setDisplaySeconds(safeSeconds)
+      setDisplayRunning(typedSession.timer_running || false)
+      hasHydratedRef.current = true
+    }
 
     if (!typedSession.workout_id) {
       setWorkout(null)
@@ -124,7 +153,7 @@ export default function SessionTvPage() {
     setLoading(false)
   }
 
-  async function updateSessionTimer(updates: Partial<LiveRoomSession>) {
+  async function updateSession(updates: Partial<LiveRoomSession>) {
     if (!session) return
 
     setSaving(true)
@@ -140,22 +169,27 @@ export default function SessionTvPage() {
       .single()
 
     if (error) {
-      setMessage(`Could not update timer: ${error.message}`)
+      setMessage(`Could not update session: ${error.message}`)
       setSaving(false)
       return
     }
 
-    const typedSession = data as LiveRoomSession
-    setSession(typedSession)
-    setMinutes(Math.min(60, Math.max(1, Math.ceil((typedSession.timer_seconds || 600) / 60))))
+    setSession(data as LiveRoomSession)
     setSaving(false)
   }
 
   async function applyTimerMinutes(value: number) {
     if (!session) return
+
     const safeValue = Math.min(60, Math.max(1, value))
-    await updateSessionTimer({
-      timer_seconds: safeValue * 60,
+    const nextSeconds = safeValue * 60
+
+    setMinutes(safeValue)
+    setDisplaySeconds(nextSeconds)
+    setDisplayRunning(false)
+
+    await updateSession({
+      timer_seconds: nextSeconds,
       timer_running: false,
     })
   }
@@ -167,8 +201,15 @@ export default function SessionTvPage() {
 
   async function adjustTimerSeconds(delta: number) {
     if (!session) return
-    const nextSeconds = Math.min(3600, Math.max(30, (session.timer_seconds || 0) + delta))
-    await updateSessionTimer({
+
+    const nextSeconds = Math.min(3600, Math.max(30, displaySeconds + delta))
+    const nextMinutes = Math.min(60, Math.max(1, Math.ceil(nextSeconds / 60)))
+
+    setDisplaySeconds(nextSeconds)
+    setDisplayRunning(false)
+    setMinutes(nextMinutes)
+
+    await updateSession({
       timer_seconds: nextSeconds,
       timer_running: false,
     })
@@ -177,10 +218,12 @@ export default function SessionTvPage() {
   async function startTimer() {
     if (!session) return
 
-    const nextSeconds =
-      (session.timer_seconds || 0) <= 0 ? minutes * 60 : session.timer_seconds
+    const nextSeconds = displaySeconds <= 0 ? minutes * 60 : displaySeconds
 
-    await updateSessionTimer({
+    setDisplaySeconds(nextSeconds)
+    setDisplayRunning(true)
+
+    await updateSession({
       timer_seconds: nextSeconds,
       timer_running: true,
     })
@@ -188,15 +231,24 @@ export default function SessionTvPage() {
 
   async function pauseTimer() {
     if (!session) return
-    await updateSessionTimer({
+
+    setDisplayRunning(false)
+
+    await updateSession({
+      timer_seconds: displaySeconds,
       timer_running: false,
     })
   }
 
   async function resetTimer() {
     if (!session) return
-    await updateSessionTimer({
-      timer_seconds: minutes * 60,
+
+    const nextSeconds = minutes * 60
+    setDisplaySeconds(nextSeconds)
+    setDisplayRunning(false)
+
+    await updateSession({
+      timer_seconds: nextSeconds,
       timer_running: false,
     })
   }
@@ -223,19 +275,22 @@ export default function SessionTvPage() {
       return aNum - bNum
     })
 
-    await updateSessionTimer({
+    const nextSeconds = minutes * 60
+    setDisplaySeconds(nextSeconds)
+    setDisplayRunning(false)
+
+    await updateSession({
       pods: sorted,
-      timer_seconds: minutes * 60,
+      timer_seconds: nextSeconds,
       timer_running: false,
     })
   }
 
   const formattedTime = useMemo(() => {
-    const totalSeconds = session?.timer_seconds ?? 0
-    const mins = Math.floor(totalSeconds / 60)
-    const secs = totalSeconds % 60
+    const mins = Math.floor(displaySeconds / 60)
+    const secs = displaySeconds % 60
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-  }, [session])
+  }, [displaySeconds])
 
   const workoutExercises = workout?.workout_data?.exercises || []
 
@@ -272,15 +327,15 @@ export default function SessionTvPage() {
 
                 <div
                   style={{
-                    color: session.timer_seconds === 0 ? '#f87171' : '#4ade80',
+                    color: displaySeconds === 0 ? '#f87171' : '#4ade80',
                     fontWeight: 900,
-                    fontSize: 28,
-                    marginTop: 8,
+                    fontSize: 24,
+                    marginTop: 6,
                   }}
                 >
-                  {session.timer_seconds === 0
+                  {displaySeconds === 0
                     ? 'Rotate pods'
-                    : session.timer_running
+                    : displayRunning
                     ? 'Running'
                     : 'Paused'}
                 </div>
@@ -338,14 +393,14 @@ export default function SessionTvPage() {
                     <button
                       onClick={() => adjustTimerSeconds(-30)}
                       style={smallTimerButtonStyle}
-                      disabled={saving || (session.timer_seconds ?? 0) <= 30}
+                      disabled={saving || displaySeconds <= 30}
                     >
                       -30s
                     </button>
                     <button
                       onClick={() => adjustTimerSeconds(30)}
                       style={smallTimerButtonStyle}
-                      disabled={saving || (session.timer_seconds ?? 0) >= 3600}
+                      disabled={saving || displaySeconds >= 3600}
                     >
                       +30s
                     </button>
@@ -452,7 +507,7 @@ const frameStyle: React.CSSProperties = {
   width: '100%',
   height: '100%',
   display: 'grid',
-  gridTemplateRows: '40px 1fr auto',
+  gridTemplateRows: '34px 1fr auto',
   gap: 0,
   minWidth: 0,
   margin: 0,
@@ -463,20 +518,20 @@ const topUtilityBarStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'flex-end',
   alignItems: 'center',
-  padding: '4px 8px',
+  padding: '3px 6px',
   backgroundColor: '#000000',
   boxSizing: 'border-box',
 }
 
 const exitTvButtonStyle: React.CSSProperties = {
   display: 'inline-block',
-  padding: '6px 10px',
+  padding: '4px 8px',
   borderRadius: 8,
   border: '1px solid #374151',
   backgroundColor: '#111827',
   color: '#ffffff',
   textDecoration: 'none',
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 700,
 }
 
@@ -535,7 +590,7 @@ const workoutPanelStyle: React.CSSProperties = {
 const timerBoardStyle: React.CSSProperties = {
   border: '2px solid #374151',
   borderRadius: 12,
-  padding: 14,
+  padding: 10,
   backgroundColor: '#000000',
   textAlign: 'center',
   minWidth: 0,
@@ -552,7 +607,7 @@ const timerTextStyle: React.CSSProperties = {
 
 const compactControlsWrapStyle: React.CSSProperties = {
   display: 'grid',
-  gap: 8,
+  gap: 6,
 }
 
 const presetRowStyle: React.CSSProperties = {
@@ -591,7 +646,7 @@ const selectWrapStyle: React.CSSProperties = {
 
 const quickRowStyle: React.CSSProperties = {
   display: 'flex',
-  gap: 8,
+  gap: 6,
   flexWrap: 'wrap',
   alignItems: 'end',
 }
@@ -607,7 +662,7 @@ const workoutHeaderRowStyle: React.CSSProperties = {
   justifyContent: 'space-between',
   alignItems: 'baseline',
   gap: 8,
-  marginBottom: 8,
+  marginBottom: 6,
   flexWrap: 'wrap',
 }
 
@@ -632,12 +687,12 @@ const labelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
-  padding: 10,
-  borderRadius: 10,
+  padding: 8,
+  borderRadius: 8,
   border: '1px solid #52525b',
   backgroundColor: '#27272a',
   color: '#ffffff',
-  fontSize: 14,
+  fontSize: 13,
   fontWeight: 700,
 }
 
@@ -696,7 +751,6 @@ const smallTimerButtonStyle: React.CSSProperties = {
   fontWeight: 800,
 }
 
-
 const exerciseListStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
@@ -726,7 +780,6 @@ const exercisePrescriptionStyle: React.CSSProperties = {
   fontWeight: 700,
   lineHeight: 1.15,
 }
-
 
 const podsGridStyle: React.CSSProperties = {
   display: 'grid',

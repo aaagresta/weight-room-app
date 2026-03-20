@@ -68,16 +68,24 @@ type PlayerBadge = {
   id: string
   awarded_at: string
   notes: string | null
-  badges: {
-    id: string
-    code: string
-    name: string
-    description: string | null
-    icon: string | null
-    category: string
-  }
+  badges:
+    | {
+        id: string
+        code: string
+        name: string
+        description: string | null
+        icon: string | null
+        category: string
+      }
+    | {
+        id: string
+        code: string
+        name: string
+        description: string | null
+        icon: string | null
+        category: string
+      }[]
 }
-
 const MAIN_LIFTS = [
   'Bench Press',
   'Back Squat',
@@ -260,7 +268,7 @@ export default function PlayerDashboardPage() {
     setAttendanceLogs((attendanceResult.data as AttendanceLog[]) || [])
     setWorkoutLogs((workoutLogsResult.data as PlayerWorkoutLog[]) || [])
     setSubmissions((submissionsResult.data as MaxSubmission[]) || [])
-    setPlayerBadges((badgesResult.data as PlayerBadge[]) || [])
+    setPlayerBadges(((badgesResult.data ?? []) as unknown as PlayerBadge[]))
 
     await loadProfilePhoto(athleteData.profile_image_path)
 
@@ -561,7 +569,7 @@ export default function PlayerDashboardPage() {
             }}
           >
             {playerBadges.map((entry) => {
-              const badge = entry.badges
+              const badge = Array.isArray(entry.badges) ? entry.badges[0] : entry.badges
               return (
                 <div
                   key={entry.id}

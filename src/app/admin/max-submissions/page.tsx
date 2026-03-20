@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { awardBadgeToAthlete, awardPrMilestones, getPrBadgeCode } from '@/lib/badges'
 
 type Athlete = {
   id: string
@@ -100,6 +101,17 @@ export default function AdminMaxSubmissionsPage() {
 
     setMessage('Submission approved.')
     await loadData()
+    const prBadgeCode = getPrBadgeCode(submission.lift_name)
+
+if (prBadgeCode) {
+  await awardBadgeToAthlete(
+    submission.athlete_id,
+    prBadgeCode,
+    `${submission.lift_name} approved at ${submission.submitted_weight} lbs`
+  )
+}
+
+await awardPrMilestones(submission.athlete_id)
   }
 
   async function rejectSubmission(id: string) {

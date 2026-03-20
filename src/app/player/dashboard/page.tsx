@@ -64,6 +64,20 @@ type MaxSubmission = {
   created_at?: string
 }
 
+type PlayerBadge = {
+  id: string
+  awarded_at: string
+  notes: string | null
+  badges: {
+    id: string
+    code: string
+    name: string
+    description: string | null
+    icon: string | null
+    category: string
+  }
+}
+
 const MAIN_LIFTS = [
   'Bench Press',
   'Back Squat',
@@ -72,10 +86,7 @@ const MAIN_LIFTS = [
   'Front Squat',
   'Overhead Press',
 ]
-function formatTime(value: number | null) {
-  if (value === null || value === undefined) return '—'
-  return Number(value).toFixed(2)
-}
+
 export default function PlayerDashboardPage() {
   const router = useRouter()
 
@@ -87,6 +98,7 @@ export default function PlayerDashboardPage() {
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([])
   const [workoutLogs, setWorkoutLogs] = useState<PlayerWorkoutLog[]>([])
   const [submissions, setSubmissions] = useState<MaxSubmission[]>([])
+  const [playerBadges, setPlayerBadges] = useState<PlayerBadge[]>([])
 
   const [selectedLift, setSelectedLift] = useState(MAIN_LIFTS[0])
   const [submittedWeight, setSubmittedWeight] = useState('')
@@ -96,12 +108,6 @@ export default function PlayerDashboardPage() {
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
-  const [editingProfile, setEditingProfile] = useState(false)
-const [editHeight, setEditHeight] = useState('')
-const [editWeight, setEditWeight] = useState('')
-const [editFortyYardDash, setEditFortyYardDash] = useState('')
-const [editProShuttle, setEditProShuttle] = useState('')
-const [savingProfile, setSavingProfile] = useState(false)
   useEffect(() => {
     loadDashboard()
   }, [])
@@ -168,50 +174,57 @@ const [savingProfile, setSavingProfile] = useState(false)
     }
 
     setAthlete(athleteData as Athlete)
-    setEditHeight(athleteData.height || '')
-setEditWeight(
-  athleteData.weight !== null && athleteData.weight !== undefined
-    ? String(athleteData.weight)
-    : ''
-)
-setEditFortyYardDash(
-  athleteData.forty_yard_dash !== null && athleteData.forty_yard_dash !== undefined
-    ? String(athleteData.forty_yard_dash)
-    : ''
-)
-setEditProShuttle(
-  athleteData.pro_shuttle !== null && athleteData.pro_shuttle !== undefined
-    ? String(athleteData.pro_shuttle)
-    : ''
-)
 
-    const [maxesResult, attendanceResult, workoutLogsResult, submissionsResult] =
-      await Promise.all([
-        supabase
-          .from('player_lift_maxes')
-          .select('*')
-          .eq('athlete_id', athleteData.id)
-          .order('lift_name', { ascending: true }),
+    const [
+      maxesResult,
+      attendanceResult,
+      workoutLogsResult,
+      submissionsResult,
+      badgesResult,
+    ] = await Promise.all([
+      supabase
+        .from('player_lift_maxes')
+        .select('*')
+        .eq('athlete_id', athleteData.id)
+        .order('lift_name', { ascending: true }),
 
-        supabase
-          .from('player_attendance_logs')
-          .select('*')
-          .eq('athlete_id', athleteData.id)
-          .order('attendance_date', { ascending: false }),
+      supabase
+        .from('player_attendance_logs')
+        .select('*')
+        .eq('athlete_id', athleteData.id)
+        .order('attendance_date', { ascending: false }),
 
-        supabase
-          .from('player_workout_logs')
-          .select('*')
-          .eq('athlete_id', athleteData.id)
-          .order('workout_date', { ascending: false })
-          .order('created_at', { ascending: false }),
+      supabase
+        .from('player_workout_logs')
+        .select('*')
+        .eq('athlete_id', athleteData.id)
+        .order('workout_date', { ascending: false })
+        .order('created_at', { ascending: false }),
 
-        supabase
-          .from('player_max_submissions')
-          .select('*')
-          .eq('athlete_id', athleteData.id)
-          .order('created_at', { ascending: false }),
-      ])
+      supabase
+        .from('player_max_submissions')
+        .select('*')
+        .eq('athlete_id', athleteData.id)
+        .order('created_at', { ascending: false }),
+
+      supabase
+        .from('player_badges')
+        .select(`
+          id,
+          awarded_at,
+          notes,
+          badges (
+            id,
+            code,
+            name,
+            description,
+            icon,
+            category
+          )
+        `)
+        .eq('athlete_id', athleteData.id)
+        .order('awarded_at', { ascending: false }),
+    ])
 
     if (maxesResult.error) {
       setMessage(`Could not load maxes: ${maxesResult.error.message}`)
@@ -237,10 +250,17 @@ setEditProShuttle(
       return
     }
 
+    if (badgesResult.error) {
+      setMessage(`Could not load badges: ${badgesResult.error.message}`)
+      setLoading(false)
+      return
+    }
+
     setMaxes((maxesResult.data as PlayerLiftMax[]) || [])
     setAttendanceLogs((attendanceResult.data as AttendanceLog[]) || [])
     setWorkoutLogs((workoutLogsResult.data as PlayerWorkoutLog[]) || [])
     setSubmissions((submissionsResult.data as MaxSubmission[]) || [])
+    setPlayerBadges((badgesResult.data as PlayerBadge[]) || [])
 
     await loadProfilePhoto(athleteData.profile_image_path)
 
@@ -351,55 +371,7 @@ setEditProShuttle(
     setSubmissionNotes('')
     await loadDashboard()
   }
-async function handleSaveProfile() {
-  if (!athlete) return
 
-  setSavingProfile(true)
-  setMessage('')
-
-  const parsedWeight = editWeight.trim() ? Number(editWeight) : null
-  const parsedForty = editFortyYardDash.trim() ? Number(editFortyYardDash) : null
-  const parsedShuttle = editProShuttle.trim() ? Number(editProShuttle) : null
-
-  if (editWeight.trim() && Number.isNaN(parsedWeight)) {
-    setMessage('Weight must be a valid number.')
-    setSavingProfile(false)
-    return
-  }
-
-  if (editFortyYardDash.trim() && Number.isNaN(parsedForty)) {
-    setMessage('40-yard dash must be a valid number.')
-    setSavingProfile(false)
-    return
-  }
-
-  if (editProShuttle.trim() && Number.isNaN(parsedShuttle)) {
-    setMessage('Pro shuttle must be a valid number.')
-    setSavingProfile(false)
-    return
-  }
-
-  const { error } = await supabase
-    .from('athletes')
-    .update({
-      height: editHeight.trim() || null,
-      weight: parsedWeight,
-      forty_yard_dash: parsedForty,
-      pro_shuttle: parsedShuttle,
-    })
-    .eq('id', athlete.id)
-
-  if (error) {
-    setMessage(`Could not save profile: ${error.message}`)
-    setSavingProfile(false)
-    return
-  }
-
-  setMessage('Profile updated successfully.')
-  setEditingProfile(false)
-  await loadDashboard()
-  setSavingProfile(false)
-}
   const attendanceStats = useMemo(() => {
     const total = attendanceLogs.length
     const present = attendanceLogs.filter((log) => log.status === 'PRESENT').length
@@ -477,8 +449,8 @@ async function handleSaveProfile() {
                 <Image
                   src={profileImageUrl}
                   alt="Player profile photo"
-                  width={150}
-                  height={150}
+                  width={96}
+                  height={96}
                   style={{ borderRadius: 999, objectFit: 'cover' }}
                   unoptimized
                 />
@@ -488,168 +460,16 @@ async function handleSaveProfile() {
                 </div>
               )}
             </div>
-              <div style={panelStyle}>
-  <div
-    style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: 12,
-      flexWrap: 'wrap',
-      marginBottom: 12,
-    }}
-  >
-    <h2 style={{ margin: 0 }}>My Profile</h2>
 
-    {!editingProfile ? (
-      <button
-        onClick={() => setEditingProfile(true)}
-        style={navButtonStyle}
-      >
-        Edit Profile
-      </button>
-    ) : (
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button
-          onClick={handleSaveProfile}
-          disabled={savingProfile}
-          style={navButtonStyle}
-        >
-          {savingProfile ? 'Saving...' : 'Save Profile'}
-        </button>
-
-        <button
-          onClick={() => {
-            setEditingProfile(false)
-            if (athlete) {
-              setEditHeight(athlete.height || '')
-              setEditWeight(
-                athlete.weight !== null && athlete.weight !== undefined
-                  ? String(athlete.weight)
-                  : ''
-              )
-              setEditFortyYardDash(
-                athlete.forty_yard_dash !== null && athlete.forty_yard_dash !== undefined
-                  ? String(athlete.forty_yard_dash)
-                  : ''
-              )
-              setEditProShuttle(
-                athlete.pro_shuttle !== null && athlete.pro_shuttle !== undefined
-                  ? String(athlete.pro_shuttle)
-                  : ''
-              )
-            }
-          }}
-          style={secondaryProfileButtonStyle}
-        >
-          Cancel
-        </button>
-      </div>
-    )}
-  </div>
-
-  {!editingProfile ? (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: 12,
-      }}
-    >
-      <MiniStat label="Height" value={athlete?.height || '—'} />
-      <MiniStat
-        label="Weight"
-        value={athlete?.weight !== null && athlete?.weight !== undefined ? `${athlete.weight}` : '—'}
-      />
-      <MiniStat
-        label="40 Yard Dash"
-        value={
-          athlete?.forty_yard_dash !== null && athlete?.forty_yard_dash !== undefined
-            ? Number(athlete.forty_yard_dash).toFixed(2)
-            : '—'
-        }
-      />
-      <MiniStat
-        label="Pro Shuttle"
-        value={
-          athlete?.pro_shuttle !== null && athlete?.pro_shuttle !== undefined
-            ? Number(athlete.pro_shuttle).toFixed(2)
-            : '—'
-        }
-      />
-    </div>
-  ) : (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: 12,
-      }}
-    >
-      <div>
-        <label style={smallLabelStyle}>Height</label>
-        <input
-          type="text"
-          value={editHeight}
-          onChange={(e) => setEditHeight(e.target.value)}
-          style={inputStyle}
-          placeholder={`Example: 6'1"`}
-        />
-      </div>
-
-      <div>
-        <label style={smallLabelStyle}>Weight</label>
-        <input
-          type="number"
-          step="0.1"
-          value={editWeight}
-          onChange={(e) => setEditWeight(e.target.value)}
-          style={inputStyle}
-          placeholder="Example: 185"
-        />
-      </div>
-
-      <div>
-        <label style={smallLabelStyle}>40 Yard Dash</label>
-        <input
-          type="number"
-          step="0.01"
-          value={editFortyYardDash}
-          onChange={(e) => setEditFortyYardDash(e.target.value)}
-          style={inputStyle}
-          placeholder="Example: 4.72"
-        />
-      </div>
-
-      <div>
-        <label style={smallLabelStyle}>Pro Shuttle</label>
-        <input
-          type="number"
-          step="0.01"
-          value={editProShuttle}
-          onChange={(e) => setEditProShuttle(e.target.value)}
-          style={inputStyle}
-          placeholder="Example: 4.31"
-        />
-      </div>
-    </div>
-  )}
-</div>
             <div>
               <h1 style={{ margin: '0 0 8px 0', fontSize: 34 }}>Player Dashboard</h1>
               {athlete && (
-                <div style={{ color: '#cbd5e1', fontSize: 16 }}>
-                  <p style={{ margin: 0 }}>
-                    {athlete.first_name} {athlete.last_name}
-                    {athlete.team_level ? ` • ${athlete.team_level}` : ''}
-                  </p>
-
-                  <p style={{ margin: '6px 0 0 0', color: '#94a3b8', fontSize: 14 }}>
-                    Height: {athlete.height || '—'} &nbsp; | &nbsp;
-                    Weight: {athlete.weight ?? '—'} lbs &nbsp; | &nbsp;
-                    40: {formatTime(athlete.forty_yard_dash)} &nbsp; | &nbsp;
-                    Shuttle: {formatTime(athlete.pro_shuttle)}                  </p>
-                </div>
+                <p style={{ color: '#cbd5e1', margin: 0, fontSize: 16 }}>
+                  {athlete.first_name} {athlete.last_name}
+                  {athlete.team_level ? ` • ${athlete.team_level}` : ''}
+                  {athlete.height ? ` • ${athlete.height}` : ''}
+                  {athlete.weight ? ` • ${athlete.weight} lbs` : ''}
+                </p>
               )}
             </div>
           </div>
@@ -667,6 +487,10 @@ async function handleSaveProfile() {
               Leaderboard
             </a>
 
+            <a href="/player/edit-profile" style={navLinkStyle}>
+              Edit Profile
+            </a>
+
             <button onClick={handleLogout} style={logoutButtonStyle}>
               Log Out
             </button>
@@ -674,7 +498,7 @@ async function handleSaveProfile() {
         </div>
 
         <div style={heroSubStyle}>
-          Track your lifting progress, attendance, maxes, workout history, and profile.
+          Track your lifting progress, attendance, maxes, workout history, profile, and earned awards.
         </div>
       </div>
 
@@ -713,6 +537,54 @@ async function handleSaveProfile() {
         <StatCard label="Current Maxes" value={String(maxes.length)} />
         <StatCard label="Total Weight Lifted" value={String(totalWeightLifted)} />
         <StatCard label="Most Logged Lift" value={favoriteLift} />
+        <StatCard
+          label="40 Yard Dash"
+          value={athlete?.forty_yard_dash !== null && athlete?.forty_yard_dash !== undefined ? athlete.forty_yard_dash.toFixed(2) : '—'}
+        />
+        <StatCard
+          label="Pro Shuttle"
+          value={athlete?.pro_shuttle !== null && athlete?.pro_shuttle !== undefined ? athlete.pro_shuttle.toFixed(2) : '—'}
+        />
+      </div>
+
+      <div style={panelStyle}>
+        <h2 style={{ marginTop: 0 }}>Badges & Awards</h2>
+
+        {playerBadges.length === 0 ? (
+          <p style={{ color: '#d4d4d8' }}>No badges earned yet.</p>
+        ) : (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 12,
+            }}
+          >
+            {playerBadges.map((entry) => {
+              const badge = entry.badges
+              return (
+                <div
+                  key={entry.id}
+                  style={{
+                    border: '1px solid #52525b',
+                    borderRadius: 14,
+                    padding: 14,
+                    backgroundColor: '#27272a',
+                  }}
+                >
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>{badge.icon || '🏅'}</div>
+                  <div style={{ fontWeight: 800, marginBottom: 4 }}>{badge.name}</div>
+                  <div style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 6 }}>
+                    {badge.description || 'Award earned'}
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: 12 }}>
+                    {new Date(entry.awarded_at).toLocaleDateString()}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <div style={panelStyle}>
@@ -1110,14 +982,6 @@ const logoutButtonStyle: React.CSSProperties = {
   borderRadius: 12,
   border: '1px solid #991b1b',
   backgroundColor: '#991b1b',
-  color: '#ffffff',
-  cursor: 'pointer',
-}
-const secondaryProfileButtonStyle: React.CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 12,
-  border: '1px solid #52525b',
-  backgroundColor: '#27272a',
   color: '#ffffff',
   cursor: 'pointer',
 }

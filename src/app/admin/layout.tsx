@@ -95,15 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Link href="/admin" style={linkStyle}>
           Home
         </Link>
-        <Link href="/admin/players" style={linkStyle}>
-          Players
-        </Link>
-        <Link href="/admin/plans" style={linkStyle}>
-          Plans
-        </Link>
-        <Link href="/admin/exercises" style={linkStyle}>
-          Exercise Library
-        </Link>
+    
       </nav>
 
       <div style={{ marginTop: 18 }}>{children}</div>

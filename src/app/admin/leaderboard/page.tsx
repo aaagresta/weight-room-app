@@ -218,7 +218,6 @@ export default function AdminLeaderboardPage() {
 
   const rightSections = [
     { title: 'Front Squat', rows: buildLiftLeaderboard('Front Squat'), suffix: 'lbs' },
-    { title: 'Overhead Press', rows: buildLiftLeaderboard('Overhead Press'), suffix: 'lbs' },
     { title: 'Attendance %', rows: attendanceLeaderboard, suffix: '%' },
     { title: '40 Yard Dash', rows: fortyLeaderboard, suffix: 's' },
     { title: 'Pro Shuttle', rows: shuttleLeaderboard, suffix: 's' },

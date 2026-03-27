@@ -246,67 +246,67 @@ export default function PlayerWorkoutPage() {
     return rounded
   }
 
-  async function submitWorkout() {
-    if (!athlete || !workout) return
+ async function submitWorkout() {
+  if (!athlete || !workout) return
 
-    setSubmitting(true)
-    setMessage('')
+  setSubmitting(true)
+  setMessage('')
 
-    const payload: any[] = []
+  const payload: any[] = []
 
-    for (const exercise of workout.workout_data?.exercises || []) {
-      for (const set of exercise.sets || []) {
-        const key = getSetKey(exercise.name, set.setNumber)
-        const current = formState[key] || { weight: '', notes: '' }
+  for (const exercise of workout.workout_data?.exercises || []) {
+    for (const set of exercise.sets || []) {
+      const key = getSetKey(exercise.name, set.setNumber)
+      const current = formState[key] || { weight: '', notes: '' }
 
-        const calculatedTargetWeight = calculateTargetWeight(set.percent, set.maxLift)
+      const calculatedTargetWeight = calculateTargetWeight(set.percent, set.maxLift)
 
-        const weightValue =
-          current.weight.trim() !== ''
-            ? Number(current.weight)
-            : calculatedTargetWeight !== null
-            ? calculatedTargetWeight
-            : null
+      const weightValue =
+        current.weight.trim() !== ''
+          ? Number(current.weight)
+          : calculatedTargetWeight !== null
+          ? calculatedTargetWeight
+          : null
 
-        const notesValue = current.notes.trim() || null
+      const notesValue = current.notes.trim() || null
 
-        const hasAnyValue = weightValue !== null || notesValue !== null
-        if (!hasAnyValue) continue
+      const hasAnyValue = weightValue !== null || notesValue !== null
+      if (!hasAnyValue) continue
 
-        payload.push({
-          athlete_id: athlete.id,
-          workout_id: workout.id,
-          workout_date: workout.workout_date,
-          exercise: exercise.name,
-          set_number: set.setNumber,
-          target_reps: set.targetReps,
-          reps_completed: null,
-          weight: weightValue,
-          notes: notesValue,
-        })
-      }
+      payload.push({
+        athlete_id: athlete.id,
+        workout_id: workout.id,
+        workout_date: workout.workout_date,
+        exercise: exercise.name,
+        set_number: set.setNumber,
+        target_reps: set.targetReps,
+        reps_completed: set.targetReps,
+        weight: weightValue,
+        notes: notesValue,
+      })
     }
-
-    if (payload.length === 0) {
-      setMessage('Please enter at least one set before submitting.')
-      setSubmitting(false)
-      return
-    }
-
-    const { error } = await supabase.from('player_workout_logs').upsert(payload, {
-      onConflict: 'athlete_id,workout_id,exercise,set_number',
-    })
-
-    if (error) {
-      setMessage(`Error submitting workout: ${error.message}`)
-      setSubmitting(false)
-      return
-    }
-
-    setMessage('Workout submitted successfully.')
-    await loadPlayerWorkout()
-    setSubmitting(false)
   }
+
+  if (payload.length === 0) {
+    setMessage('Please enter at least one set before submitting.')
+    setSubmitting(false)
+    return
+  }
+
+  const { error } = await supabase.from('player_workout_logs').upsert(payload, {
+    onConflict: 'athlete_id,workout_id,exercise,set_number',
+  })
+
+  if (error) {
+    setMessage(`Error submitting workout: ${error.message}`)
+    setSubmitting(false)
+    return
+  }
+
+  setMessage('Workout submitted successfully.')
+  await loadPlayerWorkout()
+  setSubmitting(false)
+}
 
   const completedSetCount = useMemo(() => {
     return logs.filter((log) => log.weight !== null || log.reps_completed !== null).length
